@@ -23,14 +23,6 @@ jobs:
             os: ubuntu-latest
             artifact_name: cchooked
             asset_name: cchooked-linux-aarch64
-          - target: x86_64-apple-darwin
-            os: macos-latest
-            artifact_name: cchooked
-            asset_name: cchooked-darwin-x86_64
-          - target: aarch64-apple-darwin
-            os: macos-latest
-            artifact_name: cchooked
-            asset_name: cchooked-darwin-aarch64
 
     steps:
       - uses: actions/checkout@v4
