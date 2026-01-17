@@ -1,0 +1,29 @@
+[package]
+name = "cchooked"
+version = "0.1.0"
+edition = "2024"
+description = "Claude Code Hooks Engine - Rule-based hook processor"
+license = "MIT"
+
+[[bin]]
+name = "cchooked"
+path = "src/main.rs"
+
+[dependencies]
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+regex = "1.10"
+chrono = "0.4"
+
+[dev-dependencies]
+tempfile = "3"
+
+[lints.clippy]
+all = "deny"
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+todo = "deny"
+unimplemented = "deny"
+indexing_slicing = "deny"
