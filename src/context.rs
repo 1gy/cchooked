@@ -40,6 +40,11 @@ impl Context {
 }
 
 fn get_current_branch() -> Option<String> {
+    // Allow overriding via environment variable for testing
+    if let Ok(branch) = std::env::var("CCHOOKED_BRANCH") {
+        return Some(branch);
+    }
+
     let output = Command::new("git")
         .args(["rev-parse", "--abbrev-ref", "HEAD"])
         .output()
