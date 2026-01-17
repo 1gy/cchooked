@@ -1,6 +1,7 @@
 # cchooked - Claude Code Hooks Engine
 
 ![CI](https://github.com/1gy/cchooked/actions/workflows/ci.yml/badge.svg)
+![Release](https://img.shields.io/github/v/release/1gy/cchooked)
 ![License](https://img.shields.io/github/license/1gy/cchooked)
 [![GitHub](https://img.shields.io/badge/GitHub-1gy%2Fcchooked-blue?logo=github)](https://github.com/1gy/cchooked)
 
