@@ -1,7 +1,7 @@
 use crate::config::{Config, RuleConfig};
 use crate::context::Context;
 use crate::error::{CchookedError, Result};
-use regex::Regex;
+use regex_lite::Regex;
 
 /// Hook event types that trigger rule evaluation.
 #[derive(Debug, Clone, PartialEq)]
