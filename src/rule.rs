@@ -110,8 +110,8 @@ pub struct WhenCondition {
     pub command_patterns: Vec<Regex>,
     /// Regex patterns to match against the file path.
     pub file_path_patterns: Vec<Regex>,
-    /// Branch names to match against the current git branch.
-    pub branch_names: Vec<String>,
+    /// Regex patterns to match against the current git branch.
+    pub branch_patterns: Vec<Regex>,
 }
 
 /// Transform rule configuration for command replacement.
@@ -206,7 +206,10 @@ pub fn compile_rule(name: &str, config: &RuleConfig) -> Result<Rule> {
             }
         }
         if let Some(branch) = &when_config.branch {
-            when.branch_names = branch.to_vec();
+            for pattern in branch.to_vec() {
+                when.branch_patterns
+                    .push(compile_regex_with_context(&pattern, name)?);
+            }
         }
     }
 
@@ -292,11 +295,11 @@ fn matches_file_path(patterns: &[Regex], file_path: &str) -> bool {
     patterns.iter().any(|p| p.is_match(file_path))
 }
 
-fn matches_branch(branch_names: &[String], current_branch: &str) -> bool {
-    if branch_names.is_empty() {
+fn matches_branch(patterns: &[Regex], current_branch: &str) -> bool {
+    if patterns.is_empty() {
         return true;
     }
-    branch_names.iter().any(|name| name == current_branch)
+    patterns.iter().any(|p| p.is_match(current_branch))
 }
 
 /// Evaluates rules against the given event and input.
@@ -332,12 +335,12 @@ pub fn evaluate_rules(
             }
         }
 
-        if !rule.when.branch_names.is_empty() {
+        if !rule.when.branch_patterns.is_empty() {
             if context.is_none() {
                 context = Some(Context::from_input(input));
             }
             if let Some(ref ctx) = context
-                && !matches_branch(&rule.when.branch_names, &ctx.branch)
+                && !matches_branch(&rule.when.branch_patterns, &ctx.branch)
             {
                 continue;
             }

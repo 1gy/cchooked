@@ -571,3 +571,141 @@ when.file_path = ".*\\.env.*"
     assert!(stdout.is_empty());
     assert!(stderr.is_empty());
 }
+
+fn run_cchooked_with_branch(
+    event: &str,
+    input: &str,
+    config: &str,
+    branch: &str,
+) -> (i32, String, String) {
+    let temp_dir = TempDir::new().unwrap();
+    let config_dir = temp_dir.path().join(".claude");
+    fs::create_dir_all(&config_dir).unwrap();
+    fs::write(config_dir.join("hooks-rules.toml"), config).unwrap();
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_cchooked"))
+        .arg(event)
+        .env("CCHOOKED_BRANCH", branch)
+        .current_dir(temp_dir.path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(input.as_bytes())
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+
+    let exit_code = output.status.code().unwrap_or(-1);
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    (exit_code, stdout, stderr)
+}
+
+#[test]
+fn test_when_branch_single_pattern() {
+    let config = r#"
+[rules.main-only]
+event = "PreToolUse"
+matcher = "Bash"
+action = "block"
+message = "Blocked on main branch"
+when.branch = "^main$"
+"#;
+
+    // main ブランチでマッチ
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "echo test"}}"#;
+    let (exit_code, _, stderr) = run_cchooked_with_branch("PreToolUse", input, config, "main");
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("Blocked on main branch"));
+
+    // feature ブランチではマッチしない
+    let (exit_code, stdout, stderr) =
+        run_cchooked_with_branch("PreToolUse", input, config, "feature/test");
+    assert_eq!(exit_code, 0);
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty());
+}
+
+#[test]
+fn test_when_branch_array_or_logic() {
+    let config = r#"
+[rules.protected-branches]
+event = "PreToolUse"
+matcher = "Bash"
+action = "block"
+message = "Blocked on protected branches"
+when.branch = ["^main$", "^master$", "^release/.*"]
+"#;
+
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "echo test"}}"#;
+
+    // main にマッチ
+    let (exit_code, _, stderr) = run_cchooked_with_branch("PreToolUse", input, config, "main");
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("Blocked on protected branches"));
+
+    // master にマッチ
+    let (exit_code, _, stderr) = run_cchooked_with_branch("PreToolUse", input, config, "master");
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("Blocked on protected branches"));
+
+    // release/v1.0 にマッチ
+    let (exit_code, _, stderr) =
+        run_cchooked_with_branch("PreToolUse", input, config, "release/v1.0");
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("Blocked on protected branches"));
+
+    // feature ブランチはマッチしない
+    let (exit_code, stdout, stderr) =
+        run_cchooked_with_branch("PreToolUse", input, config, "feature/new-feature");
+    assert_eq!(exit_code, 0);
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty());
+}
+
+#[test]
+fn test_when_branch_no_match() {
+    let config = r#"
+[rules.feature-only]
+event = "PreToolUse"
+matcher = "Bash"
+action = "block"
+message = "Blocked on feature branches"
+when.branch = "^feature/.*"
+"#;
+
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "echo test"}}"#;
+
+    // main はマッチしない
+    let (exit_code, stdout, stderr) = run_cchooked_with_branch("PreToolUse", input, config, "main");
+    assert_eq!(exit_code, 0);
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty());
+
+    // develop はマッチしない
+    let (exit_code, stdout, stderr) =
+        run_cchooked_with_branch("PreToolUse", input, config, "develop");
+    assert_eq!(exit_code, 0);
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty());
+
+    // hotfix/xxx はマッチしない
+    let (exit_code, stdout, stderr) =
+        run_cchooked_with_branch("PreToolUse", input, config, "hotfix/urgent-fix");
+    assert_eq!(exit_code, 0);
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty());
+
+    // feature/xxx はマッチする
+    let (exit_code, _, stderr) =
+        run_cchooked_with_branch("PreToolUse", input, config, "feature/new-feature");
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("Blocked on feature branches"));
+}
