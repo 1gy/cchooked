@@ -3,7 +3,6 @@ use std::io;
 
 /// Error types for the cchooked hook engine.
 #[derive(Debug)]
-#[allow(dead_code)]
 pub enum CchookedError {
     /// Configuration file was not found at the specified path.
     ConfigNotFound(String),

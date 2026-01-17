@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::error::{CchookedError, Result};
 use serde::Deserialize;
 use std::collections::HashMap;

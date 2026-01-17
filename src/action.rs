@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::context::Context;
 use crate::output::{self, Output};
 use crate::rule::{ActionType, EventType, LogFormat, MatchResult, OnErrorBehavior};

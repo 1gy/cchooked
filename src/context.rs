@@ -3,7 +3,6 @@ use std::process::Command;
 
 /// Execution context containing extracted input values and environment information.
 #[derive(Debug)]
-#[allow(dead_code)]
 pub struct Context {
     /// Command string from tool input.
     pub command: String,
@@ -19,7 +18,6 @@ impl Context {
     /// Creates a new context from hook input.
     ///
     /// Extracts command, file path, tool name, and detects the current git branch.
-    #[allow(dead_code)]
     pub fn from_input(input: &HookInput) -> Self {
         Self {
             command: input.tool_input.command.clone().unwrap_or_default(),
@@ -32,7 +30,6 @@ impl Context {
     /// Expands template variables in a string.
     ///
     /// Replaces `${command}`, `${file_path}`, `${tool_name}`, and `${branch}` with their values.
-    #[allow(dead_code)]
     pub fn expand(&self, template: &str) -> String {
         template
             .replace("${command}", &self.command)
@@ -42,7 +39,6 @@ impl Context {
     }
 }
 
-#[allow(dead_code)]
 fn get_current_branch() -> Option<String> {
     let output = Command::new("git")
         .args(["rev-parse", "--abbrev-ref", "HEAD"])

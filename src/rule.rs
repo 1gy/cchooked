@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::config::{Config, RuleConfig};
 use crate::context::Context;
 use crate::error::{CchookedError, Result};
