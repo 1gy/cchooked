@@ -302,7 +302,7 @@ flowchart LR
 
 - `~` in `log_file` path is automatically expanded to `$HOME`
 - Parent directories are automatically created if they don't exist
-- Logging failures are reported as warnings but don't block the tool execution
+- Logging failures are printed as warnings to stderr and do not block tool execution (exit_code remains 0)
 
 ## 7. Data Flow
 
