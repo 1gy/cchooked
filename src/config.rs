@@ -45,6 +45,8 @@ pub struct RuleConfig {
     pub transform: Option<TransformConfig>,
     /// Command template for run actions.
     pub command: Option<String>,
+    /// Working directory for run actions.
+    pub working_dir: Option<String>,
     /// Behavior when command fails (ignore or fail).
     #[serde(default = "default_on_error")]
     pub on_error: String,

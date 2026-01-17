@@ -709,3 +709,312 @@ when.branch = "^feature/.*"
     assert_eq!(exit_code, 2);
     assert!(stderr.contains("Blocked on feature branches"));
 }
+
+// =============================================================================
+// working_dir テスト
+// =============================================================================
+
+#[test]
+fn test_working_dir_default_file_dir() {
+    let temp_dir = TempDir::new().unwrap();
+    let subdir = temp_dir.path().join("src").join("nested");
+    fs::create_dir_all(&subdir).unwrap();
+
+    let output_file = temp_dir.path().join("pwd_output.txt");
+    let file_path = subdir.join("test.txt");
+
+    let input = format!(
+        r#"{{"tool_name": "Bash", "tool_input": {{"command": "pwd > {}", "file_path": "{}"}}}}"#,
+        output_file.to_str().unwrap(),
+        file_path.to_str().unwrap()
+    );
+
+    let config = r#"
+[rules.run-pwd]
+event = "PreToolUse"
+matcher = "Bash"
+action = "run"
+command = "${command}"
+"#;
+
+    let (exit_code, _, _) = run_cchooked_with_dir("PreToolUse", &input, config, &temp_dir);
+
+    assert_eq!(exit_code, 0);
+
+    // pwd の出力が file_path の親ディレクトリと一致することを確認
+    let pwd_output = fs::read_to_string(&output_file).unwrap();
+    assert_eq!(pwd_output.trim(), subdir.to_str().unwrap());
+}
+
+#[test]
+fn test_working_dir_explicit_workspace_root() {
+    let temp_dir = TempDir::new().unwrap();
+    let subdir = temp_dir.path().join("src");
+    fs::create_dir_all(&subdir).unwrap();
+
+    let output_file = temp_dir.path().join("pwd_output.txt");
+    let file_path = subdir.join("test.txt");
+
+    let input = format!(
+        r#"{{"tool_name": "Bash", "tool_input": {{"command": "pwd > {}", "file_path": "{}"}}}}"#,
+        output_file.to_str().unwrap(),
+        file_path.to_str().unwrap()
+    );
+
+    let config = r#"
+[rules.run-pwd]
+event = "PreToolUse"
+matcher = "Bash"
+action = "run"
+command = "${command}"
+working_dir = "${workspace_root}"
+"#;
+
+    let (exit_code, _, _) = run_cchooked_with_dir("PreToolUse", &input, config, &temp_dir);
+
+    assert_eq!(exit_code, 0);
+
+    // pwd の出力が workspace root (temp_dir) と一致することを確認
+    let pwd_output = fs::read_to_string(&output_file).unwrap();
+    assert_eq!(pwd_output.trim(), temp_dir.path().to_str().unwrap());
+}
+
+#[test]
+fn test_working_dir_subdirectory() {
+    let temp_dir = TempDir::new().unwrap();
+    let subdir = temp_dir.path().join("custom_dir");
+    fs::create_dir_all(&subdir).unwrap();
+
+    let output_file = temp_dir.path().join("pwd_output.txt");
+
+    let input = format!(
+        r#"{{"tool_name": "Bash", "tool_input": {{"command": "pwd > {}"}}}}"#,
+        output_file.to_str().unwrap()
+    );
+
+    let config = format!(
+        r#"
+[rules.run-pwd]
+event = "PreToolUse"
+matcher = "Bash"
+action = "run"
+command = "${{command}}"
+working_dir = "${{workspace_root}}/custom_dir"
+"#
+    );
+
+    let (exit_code, _, _) = run_cchooked_with_dir("PreToolUse", &input, &config, &temp_dir);
+
+    assert_eq!(exit_code, 0);
+
+    // pwd の出力が指定したサブディレクトリと一致することを確認
+    let pwd_output = fs::read_to_string(&output_file).unwrap();
+    assert_eq!(pwd_output.trim(), subdir.to_str().unwrap());
+}
+
+#[test]
+fn test_working_dir_relative_path() {
+    let temp_dir = TempDir::new().unwrap();
+    let subdir = temp_dir.path().join("relative_subdir");
+    fs::create_dir_all(&subdir).unwrap();
+
+    let output_file = temp_dir.path().join("pwd_output.txt");
+
+    let input = format!(
+        r#"{{"tool_name": "Bash", "tool_input": {{"command": "pwd > {}"}}}}"#,
+        output_file.to_str().unwrap()
+    );
+
+    // 相対パスを指定
+    let config = r#"
+[rules.run-pwd]
+event = "PreToolUse"
+matcher = "Bash"
+action = "run"
+command = "${command}"
+working_dir = "relative_subdir"
+"#;
+
+    let (exit_code, _, _) = run_cchooked_with_dir("PreToolUse", &input, config, &temp_dir);
+
+    assert_eq!(exit_code, 0);
+
+    // 相対パスが workspace_root からの相対パスとして解決されることを確認
+    let pwd_output = fs::read_to_string(&output_file).unwrap();
+    assert_eq!(pwd_output.trim(), subdir.to_str().unwrap());
+}
+
+#[test]
+fn test_file_dir_variable_in_command() {
+    let temp_dir = TempDir::new().unwrap();
+    let subdir = temp_dir.path().join("src").join("lib");
+    fs::create_dir_all(&subdir).unwrap();
+
+    let output_file = temp_dir.path().join("file_dir_output.txt");
+    let file_path = subdir.join("module.rs");
+
+    let input = format!(
+        r#"{{"tool_name": "Bash", "tool_input": {{"command": "test", "file_path": "{}"}}}}"#,
+        file_path.to_str().unwrap()
+    );
+
+    let config = format!(
+        r#"
+[rules.echo-file-dir]
+event = "PreToolUse"
+matcher = "Bash"
+action = "run"
+command = "echo -n ${{file_dir}} > {}"
+working_dir = "${{workspace_root}}"
+"#,
+        output_file.to_str().unwrap()
+    );
+
+    let (exit_code, _, _) = run_cchooked_with_dir("PreToolUse", &input, &config, &temp_dir);
+
+    assert_eq!(exit_code, 0);
+
+    // ${file_dir} が正しく展開されることを確認
+    let file_dir_output = fs::read_to_string(&output_file).unwrap();
+    assert_eq!(file_dir_output, subdir.to_str().unwrap());
+}
+
+#[test]
+fn test_workspace_root_variable_in_command() {
+    let temp_dir = TempDir::new().unwrap();
+    let output_file = temp_dir.path().join("workspace_root_output.txt");
+
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "test"}}"#;
+
+    let config = format!(
+        r#"
+[rules.echo-workspace-root]
+event = "PreToolUse"
+matcher = "Bash"
+action = "run"
+command = "echo -n ${{workspace_root}} > {}"
+"#,
+        output_file.to_str().unwrap()
+    );
+
+    let (exit_code, _, _) = run_cchooked_with_dir("PreToolUse", input, &config, &temp_dir);
+
+    assert_eq!(exit_code, 0);
+
+    // ${workspace_root} が正しく展開されることを確認
+    let workspace_root_output = fs::read_to_string(&output_file).unwrap();
+    assert_eq!(workspace_root_output, temp_dir.path().to_str().unwrap());
+}
+
+#[test]
+fn test_working_dir_no_file_path() {
+    // file_path が指定されていない場合（Bash ツールなど）
+    // working_dir も未指定の場合、cchooked の CWD で実行されることを確認
+    let temp_dir = TempDir::new().unwrap();
+    let output_file = temp_dir.path().join("pwd_output.txt");
+
+    // file_path を指定しない入力
+    let input = format!(
+        r#"{{"tool_name": "Bash", "tool_input": {{"command": "pwd > {}"}}}}"#,
+        output_file.to_str().unwrap()
+    );
+
+    // working_dir を指定しない設定
+    let config = r#"
+[rules.run-pwd]
+event = "PreToolUse"
+matcher = "Bash"
+action = "run"
+command = "${command}"
+"#;
+
+    let (exit_code, _, _) = run_cchooked_with_dir("PreToolUse", &input, config, &temp_dir);
+
+    assert_eq!(exit_code, 0);
+
+    // file_path がなく working_dir も未指定の場合、cchooked の CWD (temp_dir) で実行される
+    let pwd_output = fs::read_to_string(&output_file).unwrap();
+    assert_eq!(pwd_output.trim(), temp_dir.path().to_str().unwrap());
+}
+
+#[test]
+fn test_working_dir_nonexistent_directory_ignore() {
+    // 存在しないディレクトリを working_dir に指定
+    // on_error = "ignore" の場合、エラーを無視して exit 0
+    let temp_dir = TempDir::new().unwrap();
+
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "echo test"}}"#;
+
+    let config = r#"
+[rules.run-in-nonexistent]
+event = "PreToolUse"
+matcher = "Bash"
+action = "run"
+command = "${command}"
+working_dir = "/nonexistent/directory/that/does/not/exist"
+on_error = "ignore"
+"#;
+
+    let (exit_code, stdout, stderr) = run_cchooked_with_dir("PreToolUse", input, config, &temp_dir);
+
+    assert_eq!(exit_code, 0);
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty());
+}
+
+#[test]
+fn test_working_dir_nonexistent_directory_fail() {
+    // 存在しないディレクトリを working_dir に指定
+    // on_error = "fail" の場合、exit 2 で "Working directory does not exist" エラー
+    let temp_dir = TempDir::new().unwrap();
+
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "echo test"}}"#;
+
+    let config = r#"
+[rules.run-in-nonexistent]
+event = "PreToolUse"
+matcher = "Bash"
+action = "run"
+command = "${command}"
+working_dir = "/nonexistent/directory/that/does/not/exist"
+on_error = "fail"
+"#;
+
+    let (exit_code, stdout, stderr) = run_cchooked_with_dir("PreToolUse", input, config, &temp_dir);
+
+    assert_eq!(exit_code, 2);
+    assert!(stdout.is_empty());
+    assert!(stderr.contains("Working directory does not exist"));
+}
+
+#[test]
+fn test_working_dir_empty_expansion() {
+    // working_dir = "${file_dir}" で file_path が空の場合
+    // cchooked の CWD で実行されることを確認
+    let temp_dir = TempDir::new().unwrap();
+    let output_file = temp_dir.path().join("pwd_output.txt");
+
+    // file_path を指定しない入力（file_dir は空になる）
+    let input = format!(
+        r#"{{"tool_name": "Bash", "tool_input": {{"command": "pwd > {}"}}}}"#,
+        output_file.to_str().unwrap()
+    );
+
+    // working_dir = "${file_dir}" を指定（展開後は空文字列）
+    let config = r#"
+[rules.run-pwd]
+event = "PreToolUse"
+matcher = "Bash"
+action = "run"
+command = "${command}"
+working_dir = "${file_dir}"
+"#;
+
+    let (exit_code, _, _) = run_cchooked_with_dir("PreToolUse", &input, config, &temp_dir);
+
+    assert_eq!(exit_code, 0);
+
+    // ${file_dir} が空で展開された場合、cchooked の CWD (temp_dir) で実行される
+    let pwd_output = fs::read_to_string(&output_file).unwrap();
+    assert_eq!(pwd_output.trim(), temp_dir.path().to_str().unwrap());
+}

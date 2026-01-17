@@ -6,6 +6,25 @@ use std::fs::OpenOptions;
 use std::io::Write;
 use std::process::Command;
 
+/// Resolves the working directory from the template or falls back to the context's file_dir.
+fn resolve_working_dir(working_dir: Option<&String>, context: &Context) -> Option<String> {
+    let dir = match working_dir {
+        Some(template) => {
+            let expanded = context.expand(template);
+            if expanded.is_empty() {
+                context.file_dir.clone()
+            } else if std::path::Path::new(&expanded).is_absolute() {
+                expanded
+            } else {
+                format!("{}/{}", context.workspace_root, expanded)
+            }
+        }
+        None => context.file_dir.clone(),
+    };
+
+    if dir.is_empty() { None } else { Some(dir) }
+}
+
 /// Executes the action based on the match result.
 ///
 /// Processes the matched rule's action (Block, Transform, Run, or Log) and returns the appropriate output.
@@ -29,7 +48,28 @@ pub fn execute_action(match_result: &MatchResult, context: &Context, event: &Eve
             if let Some(ref cmd_template) = match_result.run_command {
                 let cmd = context.expand(cmd_template);
 
-                let result = Command::new("sh").args(["-c", &cmd]).output();
+                let working_dir = resolve_working_dir(match_result.working_dir.as_ref(), context);
+
+                if let Some(ref dir) = working_dir
+                    && !std::path::Path::new(dir).exists()
+                {
+                    return match match_result.on_error {
+                        OnErrorBehavior::Ignore => output::no_match_output(),
+                        OnErrorBehavior::Fail => output::block_output(Some(&format!(
+                            "Working directory does not exist: {}",
+                            dir
+                        ))),
+                    };
+                }
+
+                let mut command = Command::new("sh");
+                command.args(["-c", &cmd]);
+
+                if let Some(ref dir) = working_dir {
+                    command.current_dir(dir);
+                }
+
+                let result = command.output();
 
                 match result {
                     Ok(output_result) if output_result.status.success() => {

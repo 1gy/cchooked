@@ -71,6 +71,11 @@ stderr: (空)
 コマンドを実行し、on_error 設定に従って処理:
 - ignore: 常に exit 0（エラーを無視、デフォルト）
 - fail: exit 2、stderr にエラーメッセージを出力
+
+working_dir オプション:
+- デフォルト: ${file_dir}（file_path の親ディレクトリ）
+- 相対パスの場合: ${workspace_root} からの相対パスとして解決
+- 変数展開対応: ${file_dir}, ${workspace_root} などを使用可能
 ```
 
 #### log アクション
@@ -126,7 +131,9 @@ stderr: (空)
 1. `${tool_name}` -> tool_name の値
 2. `${command}` -> tool_input.command の値（存在する場合）
 3. `${file_path}` -> tool_input.file_path の値（存在する場合）
-4. `${branch}` -> `git rev-parse --abbrev-ref HEAD` の出力
+4. `${file_dir}` -> file_path の親ディレクトリ（存在する場合）
+5. `${workspace_root}` -> cchooked の CWD（カレントワーキングディレクトリ）
+6. `${branch}` -> `git rev-parse --abbrev-ref HEAD` の出力
 
 ## モジュール構成
 
