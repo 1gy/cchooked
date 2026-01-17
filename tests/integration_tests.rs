@@ -1,0 +1,573 @@
+#![allow(clippy::unwrap_used)]
+
+use std::fs;
+use std::io::Write;
+use std::process::{Command, Stdio};
+use tempfile::TempDir;
+
+fn run_cchooked(event: &str, input: &str, config: &str) -> (i32, String, String) {
+    let temp_dir = TempDir::new().unwrap();
+    let config_dir = temp_dir.path().join(".claude");
+    fs::create_dir_all(&config_dir).unwrap();
+    fs::write(config_dir.join("hooks-rules.toml"), config).unwrap();
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_cchooked"))
+        .arg(event)
+        .current_dir(temp_dir.path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(input.as_bytes())
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+
+    let exit_code = output.status.code().unwrap_or(-1);
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    (exit_code, stdout, stderr)
+}
+
+#[test]
+fn test_block_action() {
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "npm install express"}}"#;
+    let config = r#"
+[rules.no-npm]
+event = "PreToolUse"
+matcher = "Bash"
+action = "block"
+message = "use bun"
+when.command = "^npm\\s"
+"#;
+
+    let (exit_code, stdout, stderr) = run_cchooked("PreToolUse", input, config);
+
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("use bun"));
+    assert!(stdout.is_empty());
+}
+
+#[test]
+fn test_transform_action() {
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "npm install express"}}"#;
+    let config = r#"
+[rules.npm-to-bun]
+event = "PreToolUse"
+matcher = "Bash"
+action = "transform"
+when.command = "^npm\\s"
+transform.command = ["^npm", "bun"]
+"#;
+
+    let (exit_code, stdout, stderr) = run_cchooked("PreToolUse", input, config);
+
+    assert_eq!(exit_code, 0);
+    assert!(stdout.contains("bun install express"));
+    assert!(stdout.contains("hookSpecificOutput"));
+    assert!(stderr.is_empty());
+}
+
+#[test]
+fn test_no_match() {
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "bun install express"}}"#;
+    let config = r#"
+[rules.no-npm]
+event = "PreToolUse"
+matcher = "Bash"
+action = "block"
+message = "use bun"
+when.command = "^npm\\s"
+"#;
+
+    let (exit_code, stdout, stderr) = run_cchooked("PreToolUse", input, config);
+
+    assert_eq!(exit_code, 0);
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty());
+}
+
+#[test]
+fn test_priority_order() {
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "test"}}"#;
+    let config = r#"
+[rules.low]
+priority = 1
+event = "PreToolUse"
+matcher = "Bash"
+action = "block"
+message = "low"
+when.command = ".*"
+
+[rules.high]
+priority = 10
+event = "PreToolUse"
+matcher = "Bash"
+action = "block"
+message = "high"
+when.command = ".*"
+"#;
+
+    let (exit_code, _, stderr) = run_cchooked("PreToolUse", input, config);
+
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("high"));
+    assert!(!stderr.contains("low"));
+}
+
+#[test]
+fn test_file_path_condition() {
+    let input = r#"{"tool_name": "Write", "tool_input": {"file_path": "/path/to/.env"}}"#;
+    let config = r#"
+[rules.protect-env]
+event = "PreToolUse"
+matcher = "Write"
+action = "block"
+message = "Cannot edit .env files"
+when.file_path = ".*\\.env.*"
+"#;
+
+    let (exit_code, _, stderr) = run_cchooked("PreToolUse", input, config);
+
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("Cannot edit .env files"));
+}
+
+#[test]
+fn test_event_type_mismatch() {
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "npm install"}}"#;
+    let config = r#"
+[rules.post-only]
+event = "PostToolUse"
+matcher = "Bash"
+action = "block"
+message = "blocked"
+when.command = "^npm\\s"
+"#;
+
+    let (exit_code, stdout, stderr) = run_cchooked("PreToolUse", input, config);
+
+    assert_eq!(exit_code, 0);
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty());
+}
+
+#[test]
+fn test_matcher_regex() {
+    let input = r#"{"tool_name": "Edit", "tool_input": {"file_path": "/test.txt"}}"#;
+    let config = r#"
+[rules.no-edit-write]
+event = "PreToolUse"
+matcher = "Edit|Write"
+action = "block"
+message = "editing disabled"
+"#;
+
+    let (exit_code, _, stderr) = run_cchooked("PreToolUse", input, config);
+
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("editing disabled"));
+}
+
+#[test]
+fn test_invalid_json_input() {
+    let input = "invalid json";
+    let config = r#"
+[rules.test]
+event = "PreToolUse"
+matcher = "Bash"
+action = "block"
+"#;
+
+    let (exit_code, _, stderr) = run_cchooked("PreToolUse", input, config);
+
+    assert_eq!(exit_code, 1);
+    assert!(stderr.contains("Error"));
+}
+
+#[test]
+fn test_config_not_found() {
+    let temp_dir = TempDir::new().unwrap();
+
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "test"}}"#;
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_cchooked"))
+        .arg("PreToolUse")
+        .current_dir(temp_dir.path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(input.as_bytes())
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+
+    assert_eq!(output.status.code().unwrap(), 0);
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Warning"));
+}
+
+#[test]
+fn test_invalid_regex_pattern() {
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "test"}}"#;
+    let config = r#"
+[rules.invalid-regex]
+event = "PreToolUse"
+matcher = "[invalid(regex"
+action = "block"
+message = "should not reach"
+"#;
+
+    let (exit_code, _, stderr) = run_cchooked("PreToolUse", input, config);
+
+    assert_eq!(exit_code, 1);
+    assert!(stderr.contains("Error") || stderr.contains("error") || stderr.contains("regex"));
+}
+
+#[test]
+fn test_invalid_event_type() {
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "test"}}"#;
+    let config = r#"
+[rules.invalid-event]
+event = "InvalidEvent"
+matcher = "Bash"
+action = "block"
+message = "should not reach"
+"#;
+
+    let (exit_code, _, stderr) = run_cchooked("PreToolUse", input, config);
+
+    assert_eq!(exit_code, 1);
+    assert!(
+        stderr.contains("Error")
+            || stderr.contains("error")
+            || stderr.contains("unknown")
+            || stderr.contains("invalid")
+    );
+}
+
+#[test]
+fn test_invalid_action_type() {
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "test"}}"#;
+    let config = r#"
+[rules.invalid-action]
+event = "PreToolUse"
+matcher = "Bash"
+action = "invalid_action"
+message = "should not reach"
+"#;
+
+    let (exit_code, _, stderr) = run_cchooked("PreToolUse", input, config);
+
+    assert_eq!(exit_code, 1);
+    assert!(
+        stderr.contains("Error")
+            || stderr.contains("error")
+            || stderr.contains("unknown")
+            || stderr.contains("invalid")
+    );
+}
+
+fn run_cchooked_with_dir(
+    event: &str,
+    input: &str,
+    config: &str,
+    temp_dir: &TempDir,
+) -> (i32, String, String) {
+    let config_dir = temp_dir.path().join(".claude");
+    fs::create_dir_all(&config_dir).unwrap();
+    fs::write(config_dir.join("hooks-rules.toml"), config).unwrap();
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_cchooked"))
+        .arg(event)
+        .current_dir(temp_dir.path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(input.as_bytes())
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+
+    let exit_code = output.status.code().unwrap_or(-1);
+    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+    (exit_code, stdout, stderr)
+}
+
+#[test]
+fn test_log_action_requires_log_file() {
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "echo hello"}}"#;
+    let config = r#"
+[rules.log-bash]
+event = "PreToolUse"
+matcher = "Bash"
+action = "log"
+log_format = "text"
+"#;
+
+    let (exit_code, _, stderr) = run_cchooked("PreToolUse", input, config);
+
+    assert_eq!(exit_code, 1);
+    assert!(stderr.contains("log_file") || stderr.contains("log action"));
+}
+
+#[test]
+fn test_log_action_json_format_to_file() {
+    let temp_dir = TempDir::new().unwrap();
+    let log_file_path = temp_dir.path().join("test-json.log");
+
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "ls -la"}}"#;
+    let config = format!(
+        r#"
+[rules.log-json]
+event = "PreToolUse"
+matcher = "Bash"
+action = "log"
+log_format = "json"
+log_file = "{}"
+"#,
+        log_file_path.to_str().unwrap()
+    );
+
+    let (exit_code, stdout, stderr) =
+        run_cchooked_with_dir("PreToolUse", input, &config, &temp_dir);
+
+    assert_eq!(exit_code, 0);
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty()); // ファイル出力時はstderrは空
+
+    // ファイルの内容を確認
+    let log_content = fs::read_to_string(&log_file_path).unwrap();
+    assert!(log_content.contains(r#""event":"PreToolUse""#));
+    assert!(log_content.contains(r#""tool":"Bash""#));
+    assert!(log_content.contains(r#""command":"ls -la""#));
+}
+
+#[test]
+fn test_log_action_to_file() {
+    let temp_dir = TempDir::new().unwrap();
+    let log_file_path = temp_dir.path().join("test.log");
+
+    let input = r#"{"tool_name": "Write", "tool_input": {"file_path": "/tmp/test.txt"}}"#;
+    let config = format!(
+        r#"
+[rules.log-to-file]
+event = "PreToolUse"
+matcher = "Write"
+action = "log"
+log_format = "text"
+log_file = "{}"
+"#,
+        log_file_path.to_str().unwrap()
+    );
+
+    let (exit_code, stdout, stderr) =
+        run_cchooked_with_dir("PreToolUse", input, &config, &temp_dir);
+
+    assert_eq!(exit_code, 0);
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty()); // ファイル出力時はstderrは空
+
+    // ファイルの内容を確認
+    let log_content = fs::read_to_string(&log_file_path).unwrap();
+    assert!(log_content.contains("PreToolUse"));
+    assert!(log_content.contains("Write"));
+    assert!(log_content.contains("/tmp/test.txt"));
+}
+
+#[test]
+fn test_run_action_success() {
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "test"}}"#;
+    let config = r#"
+[rules.run-success]
+event = "PreToolUse"
+matcher = "Bash"
+action = "run"
+command = "exit 0"
+when.command = ".*"
+"#;
+
+    let (exit_code, stdout, stderr) = run_cchooked("PreToolUse", input, config);
+
+    assert_eq!(exit_code, 0);
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty());
+}
+
+#[test]
+fn test_run_action_on_error_ignore() {
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "test"}}"#;
+    let config = r#"
+[rules.run-ignore]
+event = "PreToolUse"
+matcher = "Bash"
+action = "run"
+command = "exit 1"
+on_error = "ignore"
+when.command = ".*"
+"#;
+
+    let (exit_code, stdout, stderr) = run_cchooked("PreToolUse", input, config);
+
+    assert_eq!(exit_code, 0);
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty());
+}
+
+#[test]
+fn test_run_action_on_error_fail() {
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "test"}}"#;
+    let config = r#"
+[rules.run-fail]
+event = "PreToolUse"
+matcher = "Bash"
+action = "run"
+command = "echo 'error message' >&2 && exit 1"
+on_error = "fail"
+when.command = ".*"
+"#;
+
+    let (exit_code, stdout, stderr) = run_cchooked("PreToolUse", input, config);
+
+    assert_eq!(exit_code, 2);
+    assert!(stdout.is_empty());
+    assert!(stderr.contains("Command failed"));
+}
+
+#[test]
+fn test_when_command_array_or_logic() {
+    let config = r#"
+[rules.no-package-managers]
+event = "PreToolUse"
+matcher = "Bash"
+action = "block"
+message = "use bun instead"
+when.command = ["^npm\\s", "^yarn\\s", "^pnpm\\s"]
+"#;
+
+    // npm にマッチ
+    let input_npm = r#"{"tool_name": "Bash", "tool_input": {"command": "npm install express"}}"#;
+    let (exit_code, _, stderr) = run_cchooked("PreToolUse", input_npm, config);
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("use bun instead"));
+
+    // yarn にマッチ
+    let input_yarn = r#"{"tool_name": "Bash", "tool_input": {"command": "yarn add express"}}"#;
+    let (exit_code, _, stderr) = run_cchooked("PreToolUse", input_yarn, config);
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("use bun instead"));
+
+    // pnpm にマッチ
+    let input_pnpm = r#"{"tool_name": "Bash", "tool_input": {"command": "pnpm install express"}}"#;
+    let (exit_code, _, stderr) = run_cchooked("PreToolUse", input_pnpm, config);
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("use bun instead"));
+
+    // bun はマッチしない
+    let input_bun = r#"{"tool_name": "Bash", "tool_input": {"command": "bun install express"}}"#;
+    let (exit_code, stdout, stderr) = run_cchooked("PreToolUse", input_bun, config);
+    assert_eq!(exit_code, 0);
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty());
+}
+
+#[test]
+fn test_when_file_path_array_or_logic() {
+    let config = r#"
+[rules.protect-sensitive-files]
+event = "PreToolUse"
+matcher = "Write"
+action = "block"
+message = "Cannot edit sensitive files"
+when.file_path = [".*\\.env.*", ".*\\.secret.*", ".*/credentials\\.json$"]
+"#;
+
+    // .env にマッチ
+    let input_env = r#"{"tool_name": "Write", "tool_input": {"file_path": "/path/to/.env"}}"#;
+    let (exit_code, _, stderr) = run_cchooked("PreToolUse", input_env, config);
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("Cannot edit sensitive files"));
+
+    // .env.local にマッチ
+    let input_env_local =
+        r#"{"tool_name": "Write", "tool_input": {"file_path": "/path/to/.env.local"}}"#;
+    let (exit_code, _, stderr) = run_cchooked("PreToolUse", input_env_local, config);
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("Cannot edit sensitive files"));
+
+    // .secret にマッチ
+    let input_secret = r#"{"tool_name": "Write", "tool_input": {"file_path": "/config/.secret"}}"#;
+    let (exit_code, _, stderr) = run_cchooked("PreToolUse", input_secret, config);
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("Cannot edit sensitive files"));
+
+    // credentials.json にマッチ
+    let input_creds =
+        r#"{"tool_name": "Write", "tool_input": {"file_path": "/home/user/credentials.json"}}"#;
+    let (exit_code, _, stderr) = run_cchooked("PreToolUse", input_creds, config);
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("Cannot edit sensitive files"));
+
+    // 通常のファイルはマッチしない
+    let input_normal =
+        r#"{"tool_name": "Write", "tool_input": {"file_path": "/path/to/config.json"}}"#;
+    let (exit_code, stdout, stderr) = run_cchooked("PreToolUse", input_normal, config);
+    assert_eq!(exit_code, 0);
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty());
+}
+
+#[test]
+fn test_when_command_and_file_path_and_logic() {
+    let config = r#"
+[rules.no-cat-env]
+event = "PreToolUse"
+matcher = "Bash"
+action = "block"
+message = "Cannot cat .env files"
+when.command = "^cat\\s"
+when.file_path = ".*\\.env.*"
+"#;
+
+    let input_cat_env = r#"{"tool_name": "Bash", "tool_input": {"command": "cat .env", "file_path": "/path/to/.env"}}"#;
+    let (exit_code, _, stderr) = run_cchooked("PreToolUse", input_cat_env, config);
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("Cannot cat .env files"));
+
+    let input_cat_other = r#"{"tool_name": "Bash", "tool_input": {"command": "cat config.json", "file_path": "/path/to/config.json"}}"#;
+    let (exit_code, stdout, stderr) = run_cchooked("PreToolUse", input_cat_other, config);
+    assert_eq!(exit_code, 0);
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty());
+
+    let input_echo_env = r#"{"tool_name": "Bash", "tool_input": {"command": "echo test", "file_path": "/path/to/.env"}}"#;
+    let (exit_code, stdout, stderr) = run_cchooked("PreToolUse", input_echo_env, config);
+    assert_eq!(exit_code, 0);
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty());
+
+    let input_echo_other = r#"{"tool_name": "Bash", "tool_input": {"command": "echo test", "file_path": "/path/to/config.json"}}"#;
+    let (exit_code, stdout, stderr) = run_cchooked("PreToolUse", input_echo_other, config);
+    assert_eq!(exit_code, 0);
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty());
+}
