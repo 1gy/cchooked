@@ -1,8 +1,8 @@
 # cchooked - Claude Code Hooks Engine
 
-![CI](https://github.com/1gy/cchooked/actions/workflows/ci.yml/badge.svg)
-![Release](https://img.shields.io/github/v/release/1gy/cchooked)
-![License](https://img.shields.io/github/license/1gy/cchooked)
+[![CI](https://github.com/1gy/cchooked/actions/workflows/ci.yml/badge.svg)](https://github.com/1gy/cchooked/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/1gy/cchooked)](https://github.com/1gy/cchooked/releases/latest)
+[![License](https://img.shields.io/github/license/1gy/cchooked)](https://github.com/1gy/cchooked/blob/main/LICENSE)
 [![GitHub](https://img.shields.io/badge/GitHub-1gy%2Fcchooked-blue?logo=github)](https://github.com/1gy/cchooked)
 
 Claude Code の hooks 機能向けルールベースエンジン。TOML 設定ファイルで宣言的にルールを定義し、コマンドのブロック、変換、ログ記録などを行います。
