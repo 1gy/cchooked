@@ -18,7 +18,7 @@
 
 ```bash
 # リポジトリをクローン
-git clone https://github.com/your-username/cchooked.git
+git clone https://github.com/1gy/cchooked.git
 cd cchooked
 
 # ビルド
