@@ -219,7 +219,7 @@ log_format = "json"
 | `${command}` | Bash コマンド全体 | `npm install express` |
 | `${file_path}` | ファイルパス | `/src/index.ts` |
 | `${file_dir}` | file_path の親ディレクトリ | `/src` |
-| `${workspace_root}` | cchooked の CWD | `/home/user/project` |
+| `${workspace_root}` | CLAUDE_PROJECT_DIR 環境変数の値（未設定時は cchooked の CWD） | `/home/user/project` |
 | `${tool_name}` | ツール名 | `Bash`, `Edit`, `Write` |
 | `${branch}` | 現在の Git ブランチ | `main`, `feature/new` |
 
