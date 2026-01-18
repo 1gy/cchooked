@@ -792,18 +792,16 @@ fn test_working_dir_subdirectory() {
         output_file.to_str().unwrap()
     );
 
-    let config = format!(
-        r#"
+    let config = r#"
 [rules.run-pwd]
 event = "PreToolUse"
 matcher = "Bash"
 action = "run"
-command = "${{command}}"
-working_dir = "${{workspace_root}}/custom_dir"
-"#
-    );
+command = "${command}"
+working_dir = "${workspace_root}/custom_dir"
+"#;
 
-    let (exit_code, _, _) = run_cchooked_with_dir("PreToolUse", &input, &config, &temp_dir);
+    let (exit_code, _, _) = run_cchooked_with_dir("PreToolUse", &input, config, &temp_dir);
 
     assert_eq!(exit_code, 0);
 
