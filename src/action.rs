@@ -52,7 +52,7 @@ pub fn execute_action(match_result: &MatchResult, context: &Context, event: &Eve
                 && let (Some(pattern), Some(replacement)) =
                     (&transform.command_pattern, &transform.command_replacement)
             {
-                let transformed = pattern.replace(&context.command, replacement.as_str());
+                let transformed = pattern.replace_all(&context.command, replacement.as_str());
                 return output::transform_output(event.as_str(), &transformed);
             }
             output::no_match_output()
