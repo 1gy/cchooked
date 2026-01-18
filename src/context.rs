@@ -32,9 +32,14 @@ impl Context {
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_default()
         };
-        let workspace_root = std::env::current_dir()
-            .map(|p| p.to_string_lossy().to_string())
-            .unwrap_or_default();
+        let workspace_root = std::env::var("CLAUDE_PROJECT_DIR")
+            .ok()
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| {
+                std::env::current_dir()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_default()
+            });
 
         Self {
             command: input.tool_input.command.clone().unwrap_or_default(),
@@ -169,5 +174,73 @@ mod tests {
 
         let result = ctx.expand("${file_dir}");
         assert_eq!(result, "/");
+    }
+
+    #[test]
+    fn test_workspace_root_uses_claude_project_dir() {
+        // Save the original value
+        let original = std::env::var("CLAUDE_PROJECT_DIR").ok();
+
+        // SAFETY: This test is run with --test-threads=1 to avoid race conditions
+        unsafe {
+            std::env::set_var("CLAUDE_PROJECT_DIR", "/custom/project/dir");
+        }
+
+        let input = HookInput {
+            tool_name: "Bash".to_string(),
+            tool_input: ToolInput {
+                command: Some("test".to_string()),
+                file_path: None,
+            },
+        };
+
+        let ctx = Context::from_input(&input);
+
+        assert_eq!(ctx.workspace_root, "/custom/project/dir");
+
+        // Restore the original value
+        // SAFETY: This test is run with --test-threads=1 to avoid race conditions
+        unsafe {
+            match original {
+                Some(val) => std::env::set_var("CLAUDE_PROJECT_DIR", val),
+                None => std::env::remove_var("CLAUDE_PROJECT_DIR"),
+            }
+        }
+    }
+
+    #[test]
+    fn test_workspace_root_fallback_when_claude_project_dir_empty() {
+        // Save the original value
+        let original = std::env::var("CLAUDE_PROJECT_DIR").ok();
+
+        // SAFETY: This test is run with --test-threads=1 to avoid race conditions
+        unsafe {
+            std::env::set_var("CLAUDE_PROJECT_DIR", "");
+        }
+
+        let input = HookInput {
+            tool_name: "Bash".to_string(),
+            tool_input: ToolInput {
+                command: Some("test".to_string()),
+                file_path: None,
+            },
+        };
+
+        let ctx = Context::from_input(&input);
+
+        // Should fallback to current_dir()
+        let expected = std::env::current_dir()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_default();
+        assert_eq!(ctx.workspace_root, expected);
+
+        // Restore the original value
+        // SAFETY: This test is run with --test-threads=1 to avoid race conditions
+        unsafe {
+            match original {
+                Some(val) => std::env::set_var("CLAUDE_PROJECT_DIR", val),
+                None => std::env::remove_var("CLAUDE_PROJECT_DIR"),
+            }
+        }
     }
 }

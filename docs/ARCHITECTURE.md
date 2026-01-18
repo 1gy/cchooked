@@ -426,6 +426,8 @@ Available in `message`, `command`, and context expansion:
 
 - `${command}` - The command being executed (for Bash tool)
 - `${file_path}` - The file path (for file-related tools)
+- `${file_dir}` - Parent directory of the file_path
+- `${workspace_root}` - Value of CLAUDE_PROJECT_DIR env var (falls back to cchooked's CWD if not set)
 - `${tool_name}` - Name of the tool being invoked
 - `${branch}` - Current git branch name
 

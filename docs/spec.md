@@ -132,7 +132,7 @@ stderr: (空)
 2. `${command}` -> tool_input.command の値（存在する場合）
 3. `${file_path}` -> tool_input.file_path の値（存在する場合）
 4. `${file_dir}` -> file_path の親ディレクトリ（存在する場合）
-5. `${workspace_root}` -> cchooked の CWD（カレントワーキングディレクトリ）
+5. `${workspace_root}` -> CLAUDE_PROJECT_DIR 環境変数の値（未設定時は cchooked の CWD）
 6. `${branch}` -> `git rev-parse --abbrev-ref HEAD` の出力
 
 ## モジュール構成
