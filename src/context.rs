@@ -87,6 +87,7 @@ fn get_current_branch() -> Option<String> {
 mod tests {
     use super::*;
     use crate::rule::ToolInput;
+    use serial_test::serial;
 
     #[test]
     fn test_context_from_input() {
@@ -177,11 +178,12 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_workspace_root_uses_claude_project_dir() {
         // Save the original value
         let original = std::env::var("CLAUDE_PROJECT_DIR").ok();
 
-        // SAFETY: This test is run with --test-threads=1 to avoid race conditions
+        // SAFETY: This test is serialized to avoid race conditions with other env var tests
         unsafe {
             std::env::set_var("CLAUDE_PROJECT_DIR", "/custom/project/dir");
         }
@@ -199,7 +201,7 @@ mod tests {
         assert_eq!(ctx.workspace_root, "/custom/project/dir");
 
         // Restore the original value
-        // SAFETY: This test is run with --test-threads=1 to avoid race conditions
+        // SAFETY: This test is serialized to avoid race conditions with other env var tests
         unsafe {
             match original {
                 Some(val) => std::env::set_var("CLAUDE_PROJECT_DIR", val),
@@ -209,11 +211,12 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn test_workspace_root_fallback_when_claude_project_dir_empty() {
         // Save the original value
         let original = std::env::var("CLAUDE_PROJECT_DIR").ok();
 
-        // SAFETY: This test is run with --test-threads=1 to avoid race conditions
+        // SAFETY: This test is serialized to avoid race conditions with other env var tests
         unsafe {
             std::env::set_var("CLAUDE_PROJECT_DIR", "");
         }
@@ -235,7 +238,7 @@ mod tests {
         assert_eq!(ctx.workspace_root, expected);
 
         // Restore the original value
-        // SAFETY: This test is run with --test-threads=1 to avoid race conditions
+        // SAFETY: This test is serialized to avoid race conditions with other env var tests
         unsafe {
             match original {
                 Some(val) => std::env::set_var("CLAUDE_PROJECT_DIR", val),

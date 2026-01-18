@@ -17,6 +17,7 @@ regex-lite = "0.1"
 chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
 
 [dev-dependencies]
+serial_test = "3.3.1"
 tempfile = "3"
 
 [profile.release]
