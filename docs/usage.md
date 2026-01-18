@@ -168,15 +168,24 @@ when.file_path = ".*\\.tsx?$"
 ```toml
 # デフォルト: file_path の親ディレクトリで実行
 [rules.auto-format]
+event = "PostToolUse"
+matcher = "Edit|Write"
+action = "run"
 command = "bun run format"
 
 # 明示的にワークスペースルートで実行
 [rules.build]
+event = "PostToolUse"
+matcher = "Write"
+action = "run"
 command = "bun run build"
 working_dir = "${workspace_root}"
 
 # サブディレクトリを指定
 [rules.frontend-lint]
+event = "PostToolUse"
+matcher = "Edit|Write"
+action = "run"
 command = "bun run lint"
 working_dir = "${workspace_root}/frontend"
 ```

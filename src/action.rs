@@ -16,7 +16,10 @@ fn resolve_working_dir(working_dir: Option<&String>, context: &Context) -> Optio
             } else if std::path::Path::new(&expanded).is_absolute() {
                 expanded
             } else {
-                format!("{}/{}", context.workspace_root, expanded)
+                std::path::PathBuf::from(&context.workspace_root)
+                    .join(&expanded)
+                    .to_string_lossy()
+                    .into_owned()
             }
         }
         None => context.file_dir.clone(),
