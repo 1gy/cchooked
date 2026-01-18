@@ -150,6 +150,8 @@ pub struct Rule {
     pub log_file: Option<String>,
     /// Output format for log actions.
     pub log_format: LogFormat,
+    /// Working directory for run actions.
+    pub working_dir: Option<String>,
 }
 
 /// Rule evaluation result containing matched rule information.
@@ -172,6 +174,8 @@ pub struct MatchResult {
     pub log_file: Option<String>,
     /// Log format if applicable.
     pub log_format: LogFormat,
+    /// Working directory for run actions.
+    pub working_dir: Option<String>,
 }
 
 fn compile_regex_with_context(pattern: &str, rule_name: &str) -> Result<Regex> {
@@ -245,6 +249,7 @@ pub fn compile_rule(name: &str, config: &RuleConfig) -> Result<Rule> {
         on_error: OnErrorBehavior::from_str(&config.on_error),
         log_file: config.log_file.clone(),
         log_format: LogFormat::from_str(&config.log_format),
+        working_dir: config.working_dir.clone(),
     })
 }
 
@@ -359,6 +364,7 @@ pub fn evaluate_rules(
                 on_error: rule.on_error.clone(),
                 log_file: rule.log_file.clone(),
                 log_format: rule.log_format.clone(),
+                working_dir: rule.working_dir.clone(),
             },
             ctx,
         ));

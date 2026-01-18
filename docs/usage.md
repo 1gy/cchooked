@@ -93,12 +93,13 @@ when.command = "^npm\\s"  # マッチ条件（正規表現）
 | `message` | - | block 時のメッセージ |
 | `when.command` | - | コマンドの正規表現パターン |
 | `when.file_path` | - | ファイルパスの正規表現パターン |
-| `when.branch` | - | Git ブランチ名（完全一致） |
+| `when.branch` | - | Git ブランチ名の正規表現パターン |
 | `transform.command` | - | `[pattern, replacement]` 形式 |
 | `command` | - | run アクション用コマンド |
 | `on_error` | "ignore" | `"ignore"` / `"fail"` |
 | `log_file` | - | ログ出力先（log アクションでは必須） |
 | `log_format` | "text" | `"text"` / `"json"` |
+| `working_dir` | `${file_dir}` | run アクションのコマンド実行ディレクトリ（`file_path` が指定されていない場合は cchooked の CWD） |
 
 ### when 条件の評価
 
@@ -160,6 +161,35 @@ on_error = "fail"
 when.file_path = ".*\\.tsx?$"
 ```
 
+**working_dir オプション:**
+
+`working_dir` でコマンドを実行するディレクトリを指定できます。デフォルトは `${file_dir}`（file_path の親ディレクトリ）です。`file_path` が指定されていない場合は cchooked の CWD で実行されます。
+
+```toml
+# デフォルト: file_path の親ディレクトリで実行
+[rules.auto-format]
+event = "PostToolUse"
+matcher = "Edit|Write"
+action = "run"
+command = "bun run format"
+
+# 明示的にワークスペースルートで実行
+[rules.build]
+event = "PostToolUse"
+matcher = "Write"
+action = "run"
+command = "bun run build"
+working_dir = "${workspace_root}"
+
+# サブディレクトリを指定
+[rules.frontend-lint]
+event = "PostToolUse"
+matcher = "Edit|Write"
+action = "run"
+command = "bun run lint"
+working_dir = "${workspace_root}/frontend"
+```
+
 **on_error オプション:**
 
 | 値 | 動作 |
@@ -188,6 +218,8 @@ log_format = "json"
 |------|------|-----|
 | `${command}` | Bash コマンド全体 | `npm install express` |
 | `${file_path}` | ファイルパス | `/src/index.ts` |
+| `${file_dir}` | file_path の親ディレクトリ | `/src` |
+| `${workspace_root}` | cchooked の CWD | `/home/user/project` |
 | `${tool_name}` | ツール名 | `Bash`, `Edit`, `Write` |
 | `${branch}` | 現在の Git ブランチ | `main`, `feature/new` |
 

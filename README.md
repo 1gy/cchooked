@@ -12,7 +12,7 @@ Claude Code の hooks 機能向けルールベースエンジン。TOML 設定�
 - **宣言的なルール定義** - TOML ファイルでシンプルに設定
 - **柔軟なマッチング** - 正規表現によるコマンド・ファイルパス・ブランチの条件指定
 - **4種類のアクション** - block, transform, run, log
-- **変数展開** - `${command}`, `${file_path}`, `${branch}` などを利用可能
+- **変数展開** - `${command}`, `${file_path}`, `${file_dir}`, `${workspace_root}`, `${branch}` などを利用可能
 
 ## クイックスタート
 
