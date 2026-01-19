@@ -48,6 +48,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serial_test",
+ "shellish_parse",
  "tempfile",
  "toml",
 ]
@@ -446,6 +447,12 @@ dependencies = [
  "quote",
  "syn",
 ]
+
+[[package]]
+name = "shellish_parse"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4c29b912ad681a28566f37b936bba1f3580a93b9391c4a0b12cb1c6b4ed79973"
 
 [[package]]
 name = "shlex"

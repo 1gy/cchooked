@@ -73,6 +73,8 @@ pub struct WhenConfig {
     pub file_path: Option<StringOrVec>,
     /// Branch names to match against.
     pub branch: Option<StringOrVec>,
+    /// Executable names to match against (exact match on command name).
+    pub executable: Option<StringOrVec>,
 }
 
 /// A flexible type that accepts either a single string or an array of strings.

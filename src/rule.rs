@@ -112,6 +112,8 @@ pub struct WhenCondition {
     pub file_path_patterns: Vec<Regex>,
     /// Regex patterns to match against the current git branch.
     pub branch_patterns: Vec<Regex>,
+    /// Executable names to match against (exact match).
+    pub executables: Vec<String>,
 }
 
 /// Transform rule configuration for command replacement.
@@ -215,6 +217,9 @@ pub fn compile_rule(name: &str, config: &RuleConfig) -> Result<Rule> {
                     .push(compile_regex_with_context(&pattern, name)?);
             }
         }
+        if let Some(executable) = &when_config.executable {
+            when.executables = executable.to_vec();
+        }
     }
 
     let transform = if let Some(transform_config) = &config.transform {
@@ -290,7 +295,24 @@ fn matches_command(patterns: &[Regex], command: &str) -> bool {
     if patterns.is_empty() {
         return true;
     }
-    patterns.iter().any(|p| p.is_match(command))
+
+    // 複合コマンドを分割
+    let commands = crate::parser::split_compound_command(command);
+    let command_strings = crate::parser::commands_to_strings(&commands);
+
+    // いずれかのサブコマンドがパターンにマッチすればtrue
+    for cmd_str in &command_strings {
+        if patterns.iter().any(|p| p.is_match(cmd_str)) {
+            return true;
+        }
+    }
+
+    // サブコマンドがない場合は元のコマンドで試行
+    if command_strings.is_empty() {
+        return patterns.iter().any(|p| p.is_match(command));
+    }
+
+    false
 }
 
 fn matches_file_path(patterns: &[Regex], file_path: &str) -> bool {
@@ -305,6 +327,23 @@ fn matches_branch(patterns: &[Regex], current_branch: &str) -> bool {
         return true;
     }
     patterns.iter().any(|p| p.is_match(current_branch))
+}
+
+fn matches_executable(executables: &[String], command: &str) -> bool {
+    if executables.is_empty() {
+        return true;
+    }
+
+    // コマンドを分割して各コマンド名を取得
+    let commands = crate::parser::split_compound_command(command);
+    for cmd_tokens in &commands {
+        if let Some(cmd_name) = cmd_tokens.first() {
+            if executables.iter().any(|e| e == cmd_name) {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// Evaluates rules against the given event and input.
@@ -351,6 +390,13 @@ pub fn evaluate_rules(
             }
         }
 
+        if !rule.when.executables.is_empty() {
+            let command = input.tool_input.command.as_deref().unwrap_or("");
+            if !matches_executable(&rule.when.executables, command) {
+                continue;
+            }
+        }
+
         // If context was not created during branch matching, create it now
         let ctx = context.unwrap_or_else(|| Context::from_input(input));
 
@@ -371,4 +417,173 @@ pub fn evaluate_rules(
     }
 
     None
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // =============================================================================
+    // matches_command テスト
+    // =============================================================================
+
+    #[test]
+    fn test_matches_command_empty_patterns() {
+        // 空のパターンは常にtrue
+        assert!(matches_command(&[], "npm install"));
+        assert!(matches_command(&[], "git status"));
+        assert!(matches_command(&[], ""));
+    }
+
+    #[test]
+    fn test_matches_command_single_pattern() {
+        let patterns = vec![Regex::new("^npm\\s").unwrap()];
+        assert!(matches_command(&patterns, "npm install express"));
+        assert!(!matches_command(&patterns, "yarn add express"));
+        assert!(!matches_command(&patterns, "bun install express"));
+    }
+
+    #[test]
+    fn test_matches_command_multiple_patterns_or_logic() {
+        // 複数パターンはOR評価
+        let patterns = vec![
+            Regex::new("^npm\\s").unwrap(),
+            Regex::new("^yarn\\s").unwrap(),
+            Regex::new("^pnpm\\s").unwrap(),
+        ];
+        assert!(matches_command(&patterns, "npm install express"));
+        assert!(matches_command(&patterns, "yarn add express"));
+        assert!(matches_command(&patterns, "pnpm install express"));
+        assert!(!matches_command(&patterns, "bun install express"));
+    }
+
+    #[test]
+    fn test_matches_command_compound_command_and() {
+        let patterns = vec![Regex::new("^git push.*--force").unwrap()];
+        // && で連結されたコマンド内のパターンを検出
+        assert!(matches_command(&patterns, "git status && git push --force"));
+        assert!(matches_command(&patterns, "echo start && git push --force"));
+        assert!(!matches_command(&patterns, "git status && git push"));
+    }
+
+    #[test]
+    fn test_matches_command_compound_command_pipe() {
+        let patterns = vec![Regex::new("^grep pattern").unwrap()];
+        // パイプで連結されたコマンドを検出
+        assert!(matches_command(&patterns, "cat file.txt | grep pattern"));
+        assert!(matches_command(&patterns, "grep pattern file.txt"));
+        assert!(!matches_command(&patterns, "cat file.txt | sed 's/a/b/'"));
+    }
+
+    #[test]
+    fn test_matches_command_compound_command_semicolon() {
+        let patterns = vec![Regex::new("^npm install").unwrap()];
+        // セミコロンで連結されたコマンドを検出
+        assert!(matches_command(
+            &patterns,
+            "echo start; npm install; echo end"
+        ));
+        assert!(!matches_command(&patterns, "echo start; echo end"));
+    }
+
+    #[test]
+    fn test_matches_command_no_match() {
+        let patterns = vec![Regex::new("^npm\\s").unwrap()];
+        assert!(!matches_command(&patterns, "bun install"));
+        assert!(!matches_command(&patterns, "yarn add"));
+        assert!(!matches_command(&patterns, "echo npm")); // npmは引数、コマンドではない
+    }
+
+    #[test]
+    fn test_matches_command_empty_command() {
+        let patterns = vec![Regex::new("^npm\\s").unwrap()];
+        assert!(!matches_command(&patterns, ""));
+        assert!(!matches_command(&patterns, "   "));
+    }
+
+    // =============================================================================
+    // matches_executable テスト
+    // =============================================================================
+
+    #[test]
+    fn test_matches_executable_empty_list() {
+        // 空のリストは常にtrue
+        assert!(matches_executable(&[], "npm install"));
+        assert!(matches_executable(&[], "git status"));
+        assert!(matches_executable(&[], ""));
+    }
+
+    #[test]
+    fn test_matches_executable_simple_command() {
+        let executables = vec!["npm".to_string()];
+        assert!(matches_executable(&executables, "npm install express"));
+        assert!(!matches_executable(&executables, "yarn add express"));
+        assert!(!matches_executable(&executables, "bun install express"));
+    }
+
+    #[test]
+    fn test_matches_executable_multiple_executables() {
+        let executables = vec!["npm".to_string(), "yarn".to_string(), "pnpm".to_string()];
+        assert!(matches_executable(&executables, "npm install express"));
+        assert!(matches_executable(&executables, "yarn add express"));
+        assert!(matches_executable(&executables, "pnpm install express"));
+        assert!(!matches_executable(&executables, "bun install express"));
+    }
+
+    #[test]
+    fn test_matches_executable_compound_command_and() {
+        let executables = vec!["npm".to_string()];
+        // && で連結されたコマンド
+        assert!(matches_executable(
+            &executables,
+            "npm install && npm run build"
+        ));
+        assert!(matches_executable(
+            &executables,
+            "echo start && npm install"
+        ));
+        assert!(!matches_executable(&executables, "echo start && yarn add"));
+    }
+
+    #[test]
+    fn test_matches_executable_compound_command_pipe() {
+        let executables = vec!["grep".to_string()];
+        // パイプで連結されたコマンド
+        assert!(matches_executable(
+            &executables,
+            "cat file.txt | grep pattern"
+        ));
+        assert!(matches_executable(&executables, "grep pattern file.txt"));
+        assert!(!matches_executable(
+            &executables,
+            "cat file.txt | sed 's/a/b/'"
+        ));
+    }
+
+    #[test]
+    fn test_matches_executable_compound_command_semicolon() {
+        let executables = vec!["npm".to_string()];
+        // セミコロンで連結されたコマンド
+        assert!(matches_executable(
+            &executables,
+            "echo start; npm install; echo end"
+        ));
+        assert!(!matches_executable(&executables, "echo start; echo end"));
+    }
+
+    #[test]
+    fn test_matches_executable_exact_match() {
+        let executables = vec!["npm".to_string()];
+        // npmにのみマッチ、npm-cliなどには部分一致しない
+        assert!(matches_executable(&executables, "npm install"));
+        // 注: 引数にnpmが含まれていてもコマンド名にはマッチしない
+        assert!(!matches_executable(&executables, "echo npm"));
+    }
+
+    #[test]
+    fn test_matches_executable_empty_command() {
+        let executables = vec!["npm".to_string()];
+        assert!(!matches_executable(&executables, ""));
+        assert!(!matches_executable(&executables, "   "));
+    }
 }
