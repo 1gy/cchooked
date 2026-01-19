@@ -119,10 +119,37 @@ stderr: (空)
 1. `event` フィールドがコマンドライン引数と一致
 2. `matcher` 正規表現が `tool_name` にマッチ
 3. `when` 条件すべてを評価（AND 結合）
-   - `when.command`: tool_input.command に対して正規表現マッチ
+   - `when.command`: tool_input.command に対して正規表現マッチ（複合コマンドは分割後にマッチ）
+   - `when.executable`: コマンドの実行ファイル名に対して完全一致（正規表現ではない）
    - `when.file_path`: tool_input.file_path に対して正規表現マッチ
-   - `when.branch`: 現在の Git ブランチと完全一致
+   - `when.branch`: 現在の Git ブランチと正規表現マッチ
 4. すべての条件を満たす場合、ルールが適用される
+
+### 複合コマンドの分割
+
+`&&`, `||`, `;`, `|` で連結された複合コマンドは分割されてから、各コマンドに対して `when.command` および `when.executable` のマッチングが行われます。
+
+```
+入力: "npm install && git push"
+分割結果: ["npm install", "git push"]
+```
+
+- `when.command` は各分割コマンドに対して正規表現マッチ
+- `when.executable` は各分割コマンドの先頭トークン（実行ファイル名）に対して完全一致
+
+いずれかの分割コマンドがマッチした場合、そのルールが適用されます。
+
+### when.executable の動作
+
+`when.executable` はコマンドの実行ファイル名（先頭トークン）に対して完全一致でマッチします。正規表現ではなく、文字列の完全一致です。
+
+```toml
+# "npm" コマンドに完全一致
+when.executable = "npm"
+
+# "npm", "yarn", "pnpm" のいずれかに完全一致（OR評価）
+when.executable = ["npm", "yarn", "pnpm"]
+```
 
 ### 変数展開の実装
 

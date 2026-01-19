@@ -3,6 +3,7 @@ mod config;
 mod context;
 mod error;
 mod output;
+mod parser;
 mod rule;
 
 use error::CchookedError;

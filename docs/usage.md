@@ -91,7 +91,8 @@ when.command = "^npm\\s"  # マッチ条件（正規表現）
 |-----------|-----------|------|
 | `priority` | 0 | 評価順序（高い値が優先） |
 | `message` | - | block 時のメッセージ |
-| `when.command` | - | コマンドの正規表現パターン |
+| `when.command` | - | コマンドの正規表現パターン（`&&`, `||`, `;`, `|` で連結された複合コマンドは分割後、各コマンドに対してマッチ） |
+| `when.executable` | - | 実行ファイル名の完全一致（正規表現ではない） |
 | `when.file_path` | - | ファイルパスの正規表現パターン |
 | `when.branch` | - | Git ブランチ名の正規表現パターン |
 | `transform.command` | - | `[pattern, replacement]` 形式 |
@@ -100,6 +101,64 @@ when.command = "^npm\\s"  # マッチ条件（正規表現）
 | `log_file` | - | ログ出力先（log アクションでは必須） |
 | `log_format` | "text" | `"text"` / `"json"` |
 | `working_dir` | `${file_dir}` | run アクションのコマンド実行ディレクトリ（`file_path` が指定されていない場合は cchooked の CWD） |
+
+### when.command
+
+コマンド文字列に対して正規表現でマッチします。
+
+**重要: 複合コマンドの分割について**
+
+`&&`, `||`, `;`, `|` で連結された複合コマンドは分割されてから各コマンドに対してマッチングが行われます。
+
+```bash
+# "npm install && git push" の場合
+# → "npm install" と "git push" がそれぞれチェック対象
+```
+
+> **注意**: サブシェル `()` やコマンド置換 `$()` 内のコマンドは分割対象外です。これらは単一のトークンとして扱われます。
+
+```toml
+# npm で始まるコマンドにマッチ
+when.command = "^npm\\s"
+
+# 複数パターン指定（OR評価）
+when.command = ["^npm\\s", "^yarn\\s"]
+```
+
+### when.executable
+
+コマンド名（実行ファイル名）に完全一致でマッチします。正規表現ではなく、文字列の完全一致です。
+
+```toml
+# 単一指定
+when.executable = "npm"
+
+# 複数指定（OR評価）
+when.executable = ["npm", "yarn", "pnpm"]
+```
+
+複合コマンドの場合、各コマンドの実行ファイル名がチェックされます：
+
+```bash
+# "npm install && git push" の場合
+# → "npm" と "git" がチェック対象
+```
+
+### when.file_path
+
+ファイルパスに対して正規表現でマッチします。
+
+```toml
+when.file_path = ".*\\.tsx?$"
+```
+
+### when.branch
+
+現在の Git ブランチ名に対して正規表現でマッチします。
+
+```toml
+when.branch = "main"
+```
 
 ### when 条件の評価
 
@@ -225,7 +284,25 @@ log_format = "json"
 
 ## よくある使用例
 
-### npm を bun に置き換える
+### npm を bun に置き換える（when.executable 使用）
+
+`when.executable` を使用すると、正規表現を書かずにシンプルにコマンドを指定できます：
+
+```toml
+# npm/yarn/pnpm を bun に統一したい場合のブロック
+[rules.prefer-bun]
+event = "PreToolUse"
+matcher = "Bash"
+action = "block"
+message = "Please use bun instead of npm/yarn/pnpm"
+when.executable = ["npm", "yarn", "pnpm"]
+```
+
+複合コマンド（例: `npm install && git push`）でも、`npm` 部分がブロックされます。
+
+### npm を bun に置き換える（when.command 使用）
+
+正規表現でより細かい制御が必要な場合：
 
 ```toml
 [rules.prefer-bun]

@@ -1038,3 +1038,266 @@ transform.command = ["\\bnpm\\b", "bun"]
     assert!(!stdout.contains("npm"));
     assert!(stderr.is_empty());
 }
+
+// =============================================================================
+// 複合コマンド分割機能のテスト
+// =============================================================================
+
+#[test]
+fn test_compound_command_block_force_push() {
+    // && で連結されたコマンド内の git push --force を検出
+    let input =
+        r#"{"tool_name": "Bash", "tool_input": {"command": "git status && git push --force"}}"#;
+    let config = r#"
+[rules.no-force-push]
+event = "PreToolUse"
+matcher = "Bash"
+action = "block"
+message = "Force push is not allowed"
+when.command = "git push.*--force"
+"#;
+
+    let (exit_code, _, stderr) = run_cchooked("PreToolUse", input, config);
+
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("Force push is not allowed"));
+}
+
+#[test]
+fn test_compound_command_quoted_not_matched() {
+    // クォート内のテキストは誤検知しない
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "echo 'git push --force' && echo done"}}"#;
+    let config = r#"
+[rules.no-force-push]
+event = "PreToolUse"
+matcher = "Bash"
+action = "block"
+message = "Force push is not allowed"
+when.command = "^git push.*--force"
+"#;
+
+    let (exit_code, stdout, stderr) = run_cchooked("PreToolUse", input, config);
+
+    // クォート内のテキストはコマンドとして認識されないのでマッチしない
+    assert_eq!(exit_code, 0);
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty());
+}
+
+#[test]
+fn test_compound_command_comment_ignored() {
+    // コメント内のテキストは誤検知しない
+    let input =
+        r#"{"tool_name": "Bash", "tool_input": {"command": "echo hello # git push --force"}}"#;
+    let config = r#"
+[rules.no-force-push]
+event = "PreToolUse"
+matcher = "Bash"
+action = "block"
+message = "Force push is not allowed"
+when.command = "^git push.*--force"
+"#;
+
+    let (exit_code, stdout, stderr) = run_cchooked("PreToolUse", input, config);
+
+    // コメント内のテキストは無視されるのでマッチしない
+    assert_eq!(exit_code, 0);
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty());
+}
+
+#[test]
+fn test_pipeline_command_detection() {
+    // パイプラインでも危険なコマンドを検出
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "cat file.txt | rm -rf /"}}"#;
+    let config = r#"
+[rules.no-rm-rf]
+event = "PreToolUse"
+matcher = "Bash"
+action = "block"
+message = "rm -rf / is dangerous"
+when.command = "^rm -rf /"
+"#;
+
+    let (exit_code, _, stderr) = run_cchooked("PreToolUse", input, config);
+
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("rm -rf / is dangerous"));
+}
+
+#[test]
+fn test_semicolon_separated_commands() {
+    // セミコロン区切りでも検出可能
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "echo start; git push --force; echo end"}}"#;
+    let config = r#"
+[rules.no-force-push]
+event = "PreToolUse"
+matcher = "Bash"
+action = "block"
+message = "Force push is not allowed"
+when.command = "^git push.*--force"
+"#;
+
+    let (exit_code, _, stderr) = run_cchooked("PreToolUse", input, config);
+
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("Force push is not allowed"));
+}
+
+// =============================================================================
+// when.executable テスト
+// =============================================================================
+
+#[test]
+fn test_when_executable_single() {
+    let config = r#"
+[rules.no-npm]
+event = "PreToolUse"
+matcher = "Bash"
+action = "block"
+message = "Use bun instead of npm"
+when.executable = "npm"
+"#;
+
+    // npm コマンドはブロックされる
+    let input_npm = r#"{"tool_name": "Bash", "tool_input": {"command": "npm install express"}}"#;
+    let (exit_code, _, stderr) = run_cchooked("PreToolUse", input_npm, config);
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("Use bun instead of npm"));
+
+    // bun コマンドはブロックされない
+    let input_bun = r#"{"tool_name": "Bash", "tool_input": {"command": "bun install express"}}"#;
+    let (exit_code, stdout, stderr) = run_cchooked("PreToolUse", input_bun, config);
+    assert_eq!(exit_code, 0);
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty());
+}
+
+#[test]
+fn test_when_executable_array_or_logic() {
+    let config = r#"
+[rules.no-package-managers]
+event = "PreToolUse"
+matcher = "Bash"
+action = "block"
+message = "Use bun instead"
+when.executable = ["npm", "yarn", "pnpm"]
+"#;
+
+    // npm にマッチ
+    let input_npm = r#"{"tool_name": "Bash", "tool_input": {"command": "npm install express"}}"#;
+    let (exit_code, _, stderr) = run_cchooked("PreToolUse", input_npm, config);
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("Use bun instead"));
+
+    // yarn にマッチ
+    let input_yarn = r#"{"tool_name": "Bash", "tool_input": {"command": "yarn add express"}}"#;
+    let (exit_code, _, stderr) = run_cchooked("PreToolUse", input_yarn, config);
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("Use bun instead"));
+
+    // pnpm にマッチ
+    let input_pnpm = r#"{"tool_name": "Bash", "tool_input": {"command": "pnpm install express"}}"#;
+    let (exit_code, _, stderr) = run_cchooked("PreToolUse", input_pnpm, config);
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("Use bun instead"));
+
+    // bun はマッチしない
+    let input_bun = r#"{"tool_name": "Bash", "tool_input": {"command": "bun install express"}}"#;
+    let (exit_code, stdout, stderr) = run_cchooked("PreToolUse", input_bun, config);
+    assert_eq!(exit_code, 0);
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty());
+}
+
+#[test]
+fn test_when_executable_compound_command() {
+    let config = r#"
+[rules.no-npm]
+event = "PreToolUse"
+matcher = "Bash"
+action = "block"
+message = "npm is not allowed"
+when.executable = "npm"
+"#;
+
+    // 複合コマンド内の npm を検出
+    let input_compound = r#"{"tool_name": "Bash", "tool_input": {"command": "echo start && npm install && echo done"}}"#;
+    let (exit_code, _, stderr) = run_cchooked("PreToolUse", input_compound, config);
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("npm is not allowed"));
+
+    // パイプ内の npm を検出
+    let input_pipe =
+        r#"{"tool_name": "Bash", "tool_input": {"command": "cat package.json | npm install"}}"#;
+    let (exit_code, _, stderr) = run_cchooked("PreToolUse", input_pipe, config);
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("npm is not allowed"));
+
+    // npm を含まない複合コマンドはブロックされない
+    let input_no_npm = r#"{"tool_name": "Bash", "tool_input": {"command": "echo start && bun install && echo done"}}"#;
+    let (exit_code, stdout, stderr) = run_cchooked("PreToolUse", input_no_npm, config);
+    assert_eq!(exit_code, 0);
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty());
+}
+
+#[test]
+fn test_when_executable_with_other_conditions() {
+    // executable と他の when 条件を組み合わせる
+    let config = r#"
+[rules.no-git-push-force]
+event = "PreToolUse"
+matcher = "Bash"
+action = "block"
+message = "Force push is not allowed"
+when.executable = "git"
+when.command = "--force"
+"#;
+
+    // git push --force はブロックされる
+    let input_force = r#"{"tool_name": "Bash", "tool_input": {"command": "git push --force"}}"#;
+    let (exit_code, _, stderr) = run_cchooked("PreToolUse", input_force, config);
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("Force push is not allowed"));
+
+    // git push (--force なし) はブロックされない
+    let input_no_force =
+        r#"{"tool_name": "Bash", "tool_input": {"command": "git push origin main"}}"#;
+    let (exit_code, stdout, stderr) = run_cchooked("PreToolUse", input_no_force, config);
+    assert_eq!(exit_code, 0);
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty());
+
+    // 他のコマンドで --force を使っても、executable が git でないのでブロックされない
+    let input_other = r#"{"tool_name": "Bash", "tool_input": {"command": "rm --force file.txt"}}"#;
+    let (exit_code, stdout, stderr) = run_cchooked("PreToolUse", input_other, config);
+    assert_eq!(exit_code, 0);
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty());
+}
+
+#[test]
+fn test_when_executable_exact_match_not_partial() {
+    let config = r#"
+[rules.no-npm]
+event = "PreToolUse"
+matcher = "Bash"
+action = "block"
+message = "npm is blocked"
+when.executable = "npm"
+"#;
+
+    // npm は完全一致でブロック
+    let input_npm = r#"{"tool_name": "Bash", "tool_input": {"command": "npm install"}}"#;
+    let (exit_code, _, stderr) = run_cchooked("PreToolUse", input_npm, config);
+    assert_eq!(exit_code, 2);
+    assert!(stderr.contains("npm is blocked"));
+
+    // echo npm のように引数に npm が含まれる場合はブロックされない（コマンド名は echo）
+    let input_echo_npm = r#"{"tool_name": "Bash", "tool_input": {"command": "echo npm"}}"#;
+    let (exit_code, stdout, stderr) = run_cchooked("PreToolUse", input_echo_npm, config);
+    assert_eq!(exit_code, 0);
+    assert!(stdout.is_empty());
+    assert!(stderr.is_empty());
+}
