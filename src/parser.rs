@@ -29,6 +29,7 @@ pub fn commands_to_strings(commands: &[Vec<String>]) -> Vec<String> {
 }
 
 #[cfg(test)]
+#[allow(clippy::indexing_slicing)]
 mod tests {
     use super::*;
 

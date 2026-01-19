@@ -337,10 +337,10 @@ fn matches_executable(executables: &[String], command: &str) -> bool {
     // コマンドを分割して各コマンド名を取得
     let commands = crate::parser::split_compound_command(command);
     for cmd_tokens in &commands {
-        if let Some(cmd_name) = cmd_tokens.first() {
-            if executables.iter().any(|e| e == cmd_name) {
-                return true;
-            }
+        if let Some(cmd_name) = cmd_tokens.first()
+            && executables.iter().any(|e| e == cmd_name)
+        {
+            return true;
         }
     }
     false
