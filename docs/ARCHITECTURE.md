@@ -2,12 +2,12 @@
 
 ## 1. Overview
 
-**cchooked** (Claude Code Hooks Engine) is a rule-based hook processor designed to intercept and control tool invocations in Claude Code. It reads JSON input from stdin describing a tool invocation, evaluates it against a set of configurable rules defined in TOML format, and outputs a decision (allow, block, or transform) as JSON to stdout.
+**cchooked** (Claude Code Hooks Engine) is a rule-based hook processor designed to intercept and control tool invocations in Claude Code. It reads JSON input from stdin describing a tool invocation, evaluates it against a set of configurable rules defined in TOML format, and outputs a decision (allow or block) as JSON to stdout.
 
 The engine supports:
 - **PreToolUse** and **PostToolUse** event hooks
 - Pattern matching using regex for tool names, commands, file paths, and git branches
-- Four action types: Block, Transform, Run, and Log
+- Three action types: Block, Run, and Log
 - Priority-based rule evaluation (first match wins)
 - Template variable expansion for dynamic command generation
 
@@ -158,11 +158,11 @@ flowchart TD
 | Module | File | Responsibility |
 |--------|------|----------------|
 | **main** | `src/main.rs` | Entry point, CLI argument parsing, stdin reading, orchestrates the hook processing pipeline |
-| **config** | `src/config.rs` | TOML configuration file loading and parsing, defines `Config`, `RuleConfig`, `WhenConfig`, `TransformConfig` structs |
+| **config** | `src/config.rs` | TOML configuration file loading and parsing, defines `Config`, `RuleConfig`, `WhenConfig` structs |
 | **rule** | `src/rule.rs` | Rule compilation (regex), rule evaluation, defines `Rule`, `MatchResult`, `EventType`, `ActionType` |
 | **context** | `src/context.rs` | Execution context creation, git branch detection, template variable expansion (`${command}`, `${file_path}`, etc.) |
-| **action** | `src/action.rs` | Action execution logic for Block, Transform, Run, and Log actions |
-| **output** | `src/output.rs` | Output struct definition, JSON serialization for transform output, stdout/stderr emission |
+| **action** | `src/action.rs` | Action execution logic for Block, Run, and Log actions |
+| **output** | `src/output.rs` | Output struct definition, JSON serialization, stdout/stderr emission |
 | **error** | `src/error.rs` | Custom error types (`CchookedError`), error formatting, `From` implementations for error conversion |
 
 ## Dependencies
@@ -183,12 +183,10 @@ flowchart TD
 | `Config` | config | Root configuration containing all rules as a HashMap |
 | `RuleConfig` | config | TOML-deserialized rule configuration with all fields |
 | `WhenConfig` | config | Conditional filter configuration (command, file_path, branch patterns) |
-| `TransformConfig` | config | Transform action configuration with regex pattern and replacement |
 | `StringOrVec` | config | Flexible type accepting single string or array of strings |
 | `Rule` | rule | Compiled rule with pre-compiled regex patterns ready for evaluation |
 | `MatchResult` | rule | Result of successful rule match containing action details |
 | `WhenCondition` | rule | Compiled when conditions with `Vec<Regex>` patterns |
-| `TransformRule` | rule | Compiled transform with `Regex` pattern and replacement string |
 | `HookInput` | rule | Parsed hook input containing tool_name and tool_input |
 | `ToolInput` | rule | Tool parameters (command, file_path) |
 | `Context` | context | Runtime context with expanded values and git branch |
@@ -200,7 +198,7 @@ flowchart TD
 | Type | Module | Variants | Description |
 |------|--------|----------|-------------|
 | `EventType` | rule | `PreToolUse`, `PostToolUse` | Hook event types |
-| `ActionType` | rule | `Block`, `Transform`, `Run`, `Log` | Available actions |
+| `ActionType` | rule | `Block`, `Run`, `Log` | Available actions |
 | `LogFormat` | rule | `Text`, `Json` | Log output formats |
 | `OnErrorBehavior` | rule | `Ignore`, `Fail` | Run action error handling |
 | `CchookedError` | error | `ConfigNotFound`, `ConfigParseError`, `InputParseError`, `RegexError`, `InvalidEventType`, `InvalidActionType`, `LogFileMissing`, `IoError` | Error types |
@@ -217,13 +215,6 @@ graph TB
             B2[Expand message template]
             B3[Return exit_code: 2<br/>stderr: message]
             B1 --> B2 --> B3
-        end
-
-        subgraph Transform["Transform Action"]
-            T1[Receive MatchResult]
-            T2[Apply regex replacement<br/>to command]
-            T3[Return JSON with<br/>hookSpecificOutput]
-            T1 --> T2 --> T3
         end
 
         subgraph Run["Run Action"]
@@ -258,7 +249,6 @@ graph TB
     end
 
     style Block fill:#ffcdd2
-    style Transform fill:#c8e6c9
     style Run fill:#fff9c4
     style Log fill:#e1bee7
 ```
@@ -274,21 +264,18 @@ flowchart LR
 
     subgraph Actions
         BLOCK[Block]
-        TRANSFORM[Transform]
         RUN[Run]
         LOG[Log]
     end
 
     subgraph Effects
         E1[exit: 2<br/>Tool blocked]
-        E2[exit: 0<br/>stdout: JSON<br/>Command modified]
         E3A[exit: 0<br/>Passthrough]
         E3B[exit: 2<br/>Blocked on failure]
         E4[exit: 0<br/>File written<br/>Passthrough]
     end
 
     MR --> BLOCK --> E1
-    MR --> TRANSFORM --> E2
     MR --> RUN --> E3A
     RUN -->|on_error: fail| E3B
     MR --> LOG --> E4
@@ -336,7 +323,7 @@ flowchart LR
 
     subgraph Output Stage
         OUT[Output]
-        STDOUT["stdout<br/>(JSON if transform)"]
+        STDOUT["stdout<br/>(JSON)"]
         STDERR["stderr<br/>(message if block)"]
         EXIT[exit_code]
     end
@@ -382,14 +369,13 @@ flowchart TB
     end
 
     subgraph "Match Result"
-        I4["MatchResult {<br/>  rule_name, action,<br/>  message, transform,<br/>  run_command, on_error,<br/>  log_file, log_format<br/>}"]
+        I4["MatchResult {<br/>  rule_name, action,<br/>  message,<br/>  run_command, on_error,<br/>  log_file, log_format<br/>}"]
     end
 
     subgraph "Output Generation"
         direction LR
         O1["Block:<br/>exit: 2, stderr: msg"]
-        O2["Transform:<br/>exit: 0, stdout: JSON"]
-        O3["Run/Log:<br/>exit: 0 (passthrough)"]
+        O2["Run/Log:<br/>exit: 0 (passthrough)"]
     end
 
     I1 -->|serde_json::from_str| I2
@@ -398,14 +384,13 @@ flowchart TB
     I3 --> I4
     I4 -->|execute_action| O1
     I4 -->|execute_action| O2
-    I4 -->|execute_action| O3
 ```
 
 ### Exit Code Reference
 
 | Exit Code | Meaning | Scenarios |
 |-----------|---------|-----------|
-| 0 | Allow / Continue | No rule matched, Transform success, Run success, Log action, Config not found (with warning) |
+| 0 | Allow / Continue | No rule matched, Run success, Log action, Config not found (with warning) |
 | 1 | Error | Parse error, invalid arguments, regex compilation error |
 | 2 | Block | Block action, Run action with `on_error: fail` |
 

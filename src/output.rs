@@ -1,4 +1,3 @@
-use serde::Serialize;
 use std::io::{self, Write};
 
 /// Hook execution output containing exit code and optional messages.
@@ -26,47 +25,6 @@ pub fn no_match_output() -> Output {
     Output {
         exit_code: 0,
         stdout: None,
-        stderr: None,
-    }
-}
-
-#[derive(Serialize)]
-struct HookSpecificOutput {
-    #[serde(rename = "hookEventName")]
-    hook_event_name: String,
-    #[serde(rename = "permissionDecision")]
-    permission_decision: String,
-    #[serde(rename = "updatedInput")]
-    updated_input: serde_json::Value,
-}
-
-#[derive(Serialize)]
-struct TransformOutput {
-    #[serde(rename = "hookSpecificOutput")]
-    hook_specific_output: HookSpecificOutput,
-}
-
-/// Creates an output that transforms the tool input with an updated command.
-pub fn transform_output(event_name: &str, updated_command: &str) -> Output {
-    let output = TransformOutput {
-        hook_specific_output: HookSpecificOutput {
-            hook_event_name: event_name.to_string(),
-            permission_decision: "allow".to_string(),
-            updated_input: serde_json::json!({ "command": updated_command }),
-        },
-    };
-
-    let stdout = match serde_json::to_string(&output) {
-        Ok(json) => Some(json),
-        Err(e) => {
-            eprintln!("Warning: failed to serialize transform output: {e}");
-            None
-        }
-    };
-
-    Output {
-        exit_code: 0,
-        stdout,
         stderr: None,
     }
 }
