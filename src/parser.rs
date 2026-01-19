@@ -18,7 +18,7 @@ pub fn split_compound_command(command: &str) -> Vec<Vec<String>> {
             .filter(|args| !args.is_empty())
             .collect(),
         Err(_) => {
-            vec![vec![command.to_string()]]
+            vec![command.split_whitespace().map(|s| s.to_string()).collect()]
         }
     }
 }
@@ -128,5 +128,40 @@ mod tests {
         assert_eq!(result.len(), 2);
         assert_eq!(result[0], vec!["npm", "install", "-g", "typescript"]);
         assert_eq!(result[1], vec!["npm", "run", "build", "--prod"]);
+    }
+
+    // =============================================================================
+    // フォールバック処理のテスト（shellish_parse がエラーを返すケース）
+    // =============================================================================
+
+    #[test]
+    fn test_fallback_unclosed_single_quote() {
+        // 閉じていないシングルクォートはパースエラー → 空白分割にフォールバック
+        let result = split_compound_command("echo 'unclosed");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], vec!["echo", "'unclosed"]);
+    }
+
+    #[test]
+    fn test_fallback_unclosed_double_quote() {
+        // 閉じていないダブルクォートはパースエラー → 空白分割にフォールバック
+        let result = split_compound_command("echo \"unclosed");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], vec!["echo", "\"unclosed"]);
+    }
+
+    #[test]
+    fn test_fallback_dangling_backslash() {
+        // 末尾のバックスラッシュはパースエラー → 空白分割にフォールバック
+        let result = split_compound_command("echo \\");
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], vec!["echo", "\\"]);
+    }
+
+    #[test]
+    fn test_fallback_preserves_executable() {
+        // フォールバック時も実行ファイル名が先頭トークンになる
+        let result = split_compound_command("npm install 'unclosed");
+        assert_eq!(result[0][0], "npm");
     }
 }
