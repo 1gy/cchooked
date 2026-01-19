@@ -43,28 +43,6 @@ stderr: {message}
 stdout: (空)
 ```
 
-#### transform アクション
-
-```
-exit code: 0
-stdout: JSON (下記スキーマ参照)
-stderr: (空)
-```
-
-**出力 JSON スキーマ:**
-
-```json
-{
-  "hookSpecificOutput": {
-    "hookEventName": "PreToolUse",
-    "permissionDecision": "allow",
-    "updatedInput": {
-      "command": "bun install express"
-    }
-  }
-}
-```
-
 #### run アクション
 
 ```
@@ -97,7 +75,7 @@ stderr: (空)
 
 | Exit Code | 意味 |
 |-----------|------|
-| 0 | 正常終了（マッチなし、transform 成功、run 成功、log 成功） |
+| 0 | 正常終了（マッチなし、run 成功、log 成功） |
 | 1 | 内部エラー（設定ファイルパースエラー、JSON パースエラー、正規表現エラー） |
 | 2 | ブロック（block アクション、run で on_error=fail） |
 
@@ -171,7 +149,7 @@ cchooked/
 │   ├── main.rs           # エントリーポイント、CLI 引数処理
 │   ├── config.rs         # TOML 設定の読み込み・パース・バリデーション
 │   ├── rule.rs           # ルール定義、マッチング評価ロジック
-│   ├── action.rs         # 各アクションの実行（block, transform, run, log）
+│   ├── action.rs         # 各アクションの実行（block, run, log）
 │   ├── context.rs        # 実行コンテキスト（変数、Git 情報取得）
 │   ├── output.rs         # 出力フォーマット生成（JSON シリアライズ）
 │   └── error.rs          # エラー型定義
@@ -206,7 +184,6 @@ cchooked/
 #### action.rs
 
 - `block`: stderr へのメッセージ出力
-- `transform`: JSON 出力の生成
 - `run`: 外部コマンド実行と結果処理
 - `log`: ログファイル/stderr への出力
 
@@ -252,36 +229,6 @@ cchooked: error: config parse error: expected string at line 5, column 10
 cchooked: error: invalid regex in rule 'my-rule': unclosed group
 ```
 
-## 実装優先順位
-
-### Phase 1: コア機能
-
-1. stdin JSON パース
-2. TOML 設定読み込み
-3. ルール評価（when.command のみ）
-4. block アクション
-5. 適切な exit code
-
-### Phase 2: 基本アクション
-
-6. transform アクション
-7. when.file_path 条件
-
-### Phase 3: 拡張機能
-
-8. run アクション
-9. log アクション
-10. when.branch 条件（git コマンド実行）
-11. priority ソート
-12. 変数展開
-
-### Phase 4: 仕上げ
-
-13. エラーハンドリング改善
-14. テスト追加
-15. ドキュメント
-16. GitHub Actions でリリース自動化
-
 ## テストケース
 
 ### 1. block アクション
@@ -305,28 +252,7 @@ when.command = "^npm\\s"
 - exit code: 2
 - stderr: "use bun"
 
-### 2. transform アクション
-
-**入力:**
-```json
-{"tool_name": "Bash", "tool_input": {"command": "npm install express"}}
-```
-
-**設定:**
-```toml
-[rules.npm-to-bun]
-event = "PreToolUse"
-matcher = "Bash"
-action = "transform"
-when.command = "^npm\\s"
-transform.command = ["^npm", "bun"]
-```
-
-**期待:**
-- exit code: 0
-- stdout: `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","updatedInput":{"command":"bun install express"}}}`
-
-### 3. マッチなし
+### 2. マッチなし
 
 **入力:**
 ```json
@@ -339,7 +265,7 @@ transform.command = ["^npm", "bun"]
 - exit code: 0
 - stdout/stderr: 空
 
-### 4. priority 順序
+### 3. priority 順序
 
 **設定:**
 ```toml
@@ -362,7 +288,7 @@ when.command = ".*"
 
 **期待:** "high" がマッチ
 
-### 5. when 条件の AND 評価
+### 4. when 条件の AND 評価
 
 **入力:**
 ```json
@@ -388,7 +314,7 @@ when.file_path = "^/src/.*"
 - exit code: 0
 - stdout/stderr: 空
 
-### 6. run アクションの on_error
+### 5. run アクションの on_error
 
 **設定:**
 ```toml

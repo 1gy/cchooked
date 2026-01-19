@@ -30,7 +30,7 @@ pub struct RuleConfig {
     pub event: String,
     /// Regex pattern to match tool names.
     pub matcher: String,
-    /// Action to perform (block, transform, run, or log).
+    /// Action to perform (block, run, or log).
     pub action: String,
     /// Priority for rule ordering (higher values are evaluated first).
     #[serde(default)]
@@ -40,9 +40,6 @@ pub struct RuleConfig {
     /// Optional conditional filters.
     #[serde(default)]
     pub when: Option<WhenConfig>,
-    /// Optional transform configuration.
-    #[serde(default)]
-    pub transform: Option<TransformConfig>,
     /// Command template for run actions.
     pub command: Option<String>,
     /// Working directory for run actions.
@@ -55,13 +52,6 @@ pub struct RuleConfig {
     /// Log format (text or json).
     #[serde(default = "default_log_format")]
     pub log_format: String,
-}
-
-/// Configuration for command transformation.
-#[derive(Debug, Default, Deserialize)]
-pub struct TransformConfig {
-    /// Regex pattern and replacement pair for command transformation.
-    pub command: Option<[String; 2]>,
 }
 
 /// Conditional filter configuration for rule matching.

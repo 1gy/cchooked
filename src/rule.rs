@@ -39,8 +39,6 @@ impl EventType {
 pub enum ActionType {
     /// Blocks the tool execution with an optional message.
     Block,
-    /// Transforms the tool input before execution.
-    Transform,
     /// Runs an external command.
     Run,
     /// Logs the tool usage to a file.
@@ -92,12 +90,11 @@ impl ActionType {
     pub fn from_str(s: &str) -> Result<Self> {
         match s {
             "block" => Ok(ActionType::Block),
-            "transform" => Ok(ActionType::Transform),
             "run" => Ok(ActionType::Run),
             "log" => Ok(ActionType::Log),
             _ => Err(CchookedError::InvalidActionType {
                 value: s.to_string(),
-                valid: vec!["block", "transform", "run", "log"],
+                valid: vec!["block", "run", "log"],
             }),
         }
     }
@@ -114,15 +111,6 @@ pub struct WhenCondition {
     pub branch_patterns: Vec<Regex>,
     /// Executable names to match against (exact match).
     pub executables: Vec<String>,
-}
-
-/// Transform rule configuration for command replacement.
-#[derive(Debug, Clone)]
-pub struct TransformRule {
-    /// Regex pattern to match in the command.
-    pub command_pattern: Option<Regex>,
-    /// Replacement string for the matched pattern.
-    pub command_replacement: Option<String>,
 }
 
 /// A compiled rule ready for evaluation.
@@ -142,8 +130,6 @@ pub struct Rule {
     pub message: Option<String>,
     /// Additional conditions for matching.
     pub when: WhenCondition,
-    /// Transform configuration for transform actions.
-    pub transform: Option<TransformRule>,
     /// Command template for run actions.
     pub run_command: Option<String>,
     /// Behavior when run command fails.
@@ -166,8 +152,6 @@ pub struct MatchResult {
     pub action: ActionType,
     /// Optional message for block actions.
     pub message: Option<String>,
-    /// Transform configuration if applicable.
-    pub transform: Option<TransformRule>,
     /// Command to run if applicable.
     pub run_command: Option<String>,
     /// Behavior when command fails.
@@ -222,19 +206,6 @@ pub fn compile_rule(name: &str, config: &RuleConfig) -> Result<Rule> {
         }
     }
 
-    let transform = if let Some(transform_config) = &config.transform {
-        if let Some(ref cmd) = transform_config.command {
-            Some(TransformRule {
-                command_pattern: Some(compile_regex_with_context(&cmd[0], name)?),
-                command_replacement: Some(cmd[1].clone()),
-            })
-        } else {
-            None
-        }
-    } else {
-        None
-    };
-
     if action == ActionType::Log && config.log_file.is_none() {
         return Err(CchookedError::LogFileMissing {
             rule_name: name.to_string(),
@@ -249,7 +220,6 @@ pub fn compile_rule(name: &str, config: &RuleConfig) -> Result<Rule> {
         priority: config.priority,
         message: config.message.clone(),
         when,
-        transform,
         run_command: config.command.clone(),
         on_error: OnErrorBehavior::from_str(&config.on_error),
         log_file: config.log_file.clone(),
@@ -405,7 +375,6 @@ pub fn evaluate_rules(
                 rule_name: rule.name.clone(),
                 action: rule.action.clone(),
                 message: rule.message.clone(),
-                transform: rule.transform.clone(),
                 run_command: rule.run_command.clone(),
                 on_error: rule.on_error.clone(),
                 log_file: rule.log_file.clone(),

@@ -40,22 +40,12 @@ fn resolve_working_dir(working_dir: Option<&String>, context: &Context) -> Optio
 
 /// Executes the action based on the match result.
 ///
-/// Processes the matched rule's action (Block, Transform, Run, or Log) and returns the appropriate output.
+/// Processes the matched rule's action (Block, Run, or Log) and returns the appropriate output.
 pub fn execute_action(match_result: &MatchResult, context: &Context, event: &EventType) -> Output {
     match match_result.action {
         ActionType::Block => {
             let message = match_result.message.as_ref().map(|m| context.expand(m));
             output::block_output(message.as_deref())
-        }
-        ActionType::Transform => {
-            if let Some(ref transform) = match_result.transform
-                && let (Some(pattern), Some(replacement)) =
-                    (&transform.command_pattern, &transform.command_replacement)
-            {
-                let transformed = pattern.replace_all(&context.command, replacement.as_str());
-                return output::transform_output(event.as_str(), &transformed);
-            }
-            output::no_match_output()
         }
         ActionType::Run => {
             if let Some(ref cmd_template) = match_result.run_command {

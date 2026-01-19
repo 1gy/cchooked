@@ -55,26 +55,6 @@ when.command = "^npm\\s"
 }
 
 #[test]
-fn test_transform_action() {
-    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "npm install express"}}"#;
-    let config = r#"
-[rules.npm-to-bun]
-event = "PreToolUse"
-matcher = "Bash"
-action = "transform"
-when.command = "^npm\\s"
-transform.command = ["^npm", "bun"]
-"#;
-
-    let (exit_code, stdout, stderr) = run_cchooked("PreToolUse", input, config);
-
-    assert_eq!(exit_code, 0);
-    assert!(stdout.contains("bun install express"));
-    assert!(stdout.contains("hookSpecificOutput"));
-    assert!(stderr.is_empty());
-}
-
-#[test]
 fn test_no_match() {
     let input = r#"{"tool_name": "Bash", "tool_input": {"command": "bun install express"}}"#;
     let config = r#"
@@ -1015,28 +995,6 @@ working_dir = "${file_dir}"
     // ${file_dir} が空で展開された場合、cchooked の CWD (temp_dir) で実行される
     let pwd_output = fs::read_to_string(&output_file).unwrap();
     assert_eq!(pwd_output.trim(), temp_dir.path().to_str().unwrap());
-}
-
-#[test]
-fn test_transform_action_multiple_matches() {
-    // イシュー#11: 複合コマンドで全てのnpmをbunに置換
-    let input =
-        r#"{"tool_name": "Bash", "tool_input": {"command": "npm install && npm run build"}}"#;
-    let config = r#"
-[rules.npm-to-bun]
-event = "PreToolUse"
-matcher = "Bash"
-action = "transform"
-when.command = "\\bnpm\\s"
-transform.command = ["\\bnpm\\b", "bun"]
-"#;
-
-    let (exit_code, stdout, stderr) = run_cchooked("PreToolUse", input, config);
-
-    assert_eq!(exit_code, 0);
-    assert!(stdout.contains("bun install && bun run build"));
-    assert!(!stdout.contains("npm"));
-    assert!(stderr.is_empty());
 }
 
 // =============================================================================

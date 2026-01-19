@@ -83,7 +83,7 @@ when.command = "^npm\\s"  # マッチ条件（正規表現）
 |-----------|------|
 | `event` | `"PreToolUse"` または `"PostToolUse"` |
 | `matcher` | ツール名パターン（正規表現可、`\|` で OR） |
-| `action` | `"block"` / `"transform"` / `"run"` / `"log"` |
+| `action` | `"block"` / `"run"` / `"log"` |
 
 ### オプションフィールド
 
@@ -95,7 +95,6 @@ when.command = "^npm\\s"  # マッチ条件（正規表現）
 | `when.executable` | - | 実行ファイル名の完全一致（正規表現ではない） |
 | `when.file_path` | - | ファイルパスの正規表現パターン |
 | `when.branch` | - | Git ブランチ名の正規表現パターン |
-| `transform.command` | - | `[pattern, replacement]` 形式 |
 | `command` | - | run アクション用コマンド |
 | `on_error` | "ignore" | `"ignore"` / `"fail"` |
 | `log_file` | - | ログ出力先（log アクションでは必須） |
@@ -191,22 +190,7 @@ message = """
 when.command = "^(node|npm|npx|yarn)\\s"
 ```
 
-### 2. transform - コマンドを変換
-
-マッチしたコマンドを別のコマンドに自動変換します。
-
-```toml
-[rules.auto-replace-npm]
-event = "PreToolUse"
-matcher = "Bash"
-action = "transform"
-when.command = "^npm\\s"
-transform.command = ["^npm", "bun"]
-```
-
-この設定により、`npm install express` は自動的に `bun install express` に変換されます。
-
-### 3. run - コマンドを実行
+### 2. run - コマンドを実行
 
 ファイル編集後にフォーマッターを実行するなど、追加のコマンドを実行します。
 
@@ -256,7 +240,7 @@ working_dir = "${workspace_root}/frontend"
 | `ignore` | エラーを無視して続行（デフォルト） |
 | `fail` | エラーメッセージを表示して処理を中断 |
 
-### 4. log - ログを記録
+### 3. log - ログを記録
 
 コマンド実行をファイルに記録します。`log_file` は必須です。
 
@@ -271,7 +255,7 @@ log_format = "json"
 
 ## 変数展開
 
-以下の変数が `message`、`command`、`transform` 内で使用可能です：
+以下の変数が `message`、`command` 内で使用可能です：
 
 | 変数 | 説明 | 例 |
 |------|------|-----|
@@ -299,28 +283,6 @@ when.executable = ["npm", "yarn", "pnpm"]
 ```
 
 複合コマンド（例: `npm install && git push`）でも、`npm` 部分がブロックされます。
-
-### npm を bun に置き換える（when.command 使用）
-
-正規表現でより細かい制御が必要な場合：
-
-```toml
-[rules.prefer-bun]
-event = "PreToolUse"
-matcher = "Bash"
-action = "block"
-priority = 10
-message = "bun を使用してください（npm -> bun, npx -> bunx）"
-when.command = "^(npm|npx|yarn)\\s"
-
-[rules.auto-bun]
-event = "PreToolUse"
-matcher = "Bash"
-action = "transform"
-priority = 20
-when.command = "^npm\\s"
-transform.command = ["^npm", "bun"]
-```
 
 ### 環境ファイルを保護する
 
@@ -391,12 +353,6 @@ cchooked --help
 - デフォルトの配置場所は `.claude/hooks-rules.toml`
 - `--config` オプションで明示的にパスを指定可能
 - 設定ファイルのパースエラーは exit code 1 で stderr に出力
-
-### transform が適用されない
-
-- transform は stdout に JSON を出力します
-- `transform.command` は `[pattern, replacement]` 形式の配列で指定
-- パターンは正規表現として評価されます
 
 ### run コマンドのエラーが表示されない
 
