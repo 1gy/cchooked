@@ -93,7 +93,7 @@ fn parse_args() -> Args {
                         result.config_path = Some(config_arg.clone());
                     } else {
                         eprintln!("Error: --config option requires a value");
-                        std::process::exit(1);
+                        std::process::exit(2);
                     }
                 }
                 a if !a.starts_with('-') && result.event.is_none() => {
@@ -159,15 +159,14 @@ fn main() {
             std::process::exit(out.exit_code);
         }
         Err(e) => {
-            if let CchookedError::ConfigNotFound(ref _path) = e {
+            if e.is_warning() {
                 eprintln!("Warning: {e}");
                 let out = output::no_match_output();
                 output::emit(&out);
-                std::process::exit(0);
             } else {
                 eprintln!("Error: {e}");
-                std::process::exit(1);
             }
+            std::process::exit(e.exit_code());
         }
     }
 }

@@ -167,7 +167,7 @@ action = "block"
 
     let (exit_code, _, stderr) = run_cchooked("PreToolUse", input, config);
 
-    assert_eq!(exit_code, 1);
+    assert_eq!(exit_code, 2);
     assert!(stderr.contains("Error"));
 }
 
@@ -211,7 +211,7 @@ message = "should not reach"
 
     let (exit_code, _, stderr) = run_cchooked("PreToolUse", input, config);
 
-    assert_eq!(exit_code, 1);
+    assert_eq!(exit_code, 2);
     assert!(stderr.contains("Error") || stderr.contains("error") || stderr.contains("regex"));
 }
 
@@ -228,7 +228,7 @@ message = "should not reach"
 
     let (exit_code, _, stderr) = run_cchooked("PreToolUse", input, config);
 
-    assert_eq!(exit_code, 1);
+    assert_eq!(exit_code, 2);
     assert!(
         stderr.contains("Error")
             || stderr.contains("error")
@@ -250,7 +250,7 @@ message = "should not reach"
 
     let (exit_code, _, stderr) = run_cchooked("PreToolUse", input, config);
 
-    assert_eq!(exit_code, 1);
+    assert_eq!(exit_code, 2);
     assert!(
         stderr.contains("Error")
             || stderr.contains("error")
@@ -306,7 +306,7 @@ log_format = "text"
 
     let (exit_code, _, stderr) = run_cchooked("PreToolUse", input, config);
 
-    assert_eq!(exit_code, 1);
+    assert_eq!(exit_code, 2);
     assert!(stderr.contains("log_file") || stderr.contains("log action"));
 }
 
