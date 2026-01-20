@@ -1299,24 +1299,14 @@ fn test_missing_event_argument_returns_exit_code_2() {
     fs::create_dir_all(&config_dir).unwrap();
     fs::write(config_dir.join("hooks-rules.toml"), "[rules]").unwrap();
 
-    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "test"}}"#;
-
-    // No event argument provided
-    let mut child = Command::new(env!("CARGO_BIN_EXE_cchooked"))
+    // No event argument provided - cchooked exits before reading stdin
+    let output = Command::new(env!("CARGO_BIN_EXE_cchooked"))
         .current_dir(temp_dir.path())
-        .stdin(Stdio::piped())
+        .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
-        .spawn()
+        .output()
         .unwrap();
-
-    child
-        .stdin
-        .as_mut()
-        .unwrap()
-        .write_all(input.as_bytes())
-        .unwrap();
-    let output = child.wait_with_output().unwrap();
 
     assert_eq!(output.status.code().unwrap(), 2);
     assert!(String::from_utf8_lossy(&output.stderr).contains("Missing event argument"));
