@@ -1259,3 +1259,65 @@ when.executable = "npm"
     assert!(stdout.is_empty());
     assert!(stderr.is_empty());
 }
+
+#[test]
+fn test_config_parse_error_returns_exit_code_2() {
+    let temp_dir = TempDir::new().unwrap();
+    let config_dir = temp_dir.path().join(".claude");
+    fs::create_dir_all(&config_dir).unwrap();
+    // Invalid TOML syntax
+    fs::write(config_dir.join("hooks-rules.toml"), "invalid [ toml syntax").unwrap();
+
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "test"}}"#;
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_cchooked"))
+        .arg("PreToolUse")
+        .current_dir(temp_dir.path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(input.as_bytes())
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+
+    assert_eq!(output.status.code().unwrap(), 2);
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Error"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Failed to parse config file"));
+}
+
+#[test]
+fn test_missing_event_argument_returns_exit_code_2() {
+    let temp_dir = TempDir::new().unwrap();
+    let config_dir = temp_dir.path().join(".claude");
+    fs::create_dir_all(&config_dir).unwrap();
+    fs::write(config_dir.join("hooks-rules.toml"), "[rules]").unwrap();
+
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "test"}}"#;
+
+    // No event argument provided
+    let mut child = Command::new(env!("CARGO_BIN_EXE_cchooked"))
+        .current_dir(temp_dir.path())
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .unwrap();
+
+    child
+        .stdin
+        .as_mut()
+        .unwrap()
+        .write_all(input.as_bytes())
+        .unwrap();
+    let output = child.wait_with_output().unwrap();
+
+    assert_eq!(output.status.code().unwrap(), 2);
+    assert!(String::from_utf8_lossy(&output.stderr).contains("Missing event argument"));
+}
