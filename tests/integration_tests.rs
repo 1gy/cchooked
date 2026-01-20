@@ -168,7 +168,7 @@ action = "block"
     let (exit_code, _, stderr) = run_cchooked("PreToolUse", input, config);
 
     assert_eq!(exit_code, 2);
-    assert!(stderr.contains("Error"));
+    assert!(stderr.contains("[cchooked]"));
 }
 
 #[test]
@@ -212,7 +212,7 @@ message = "should not reach"
     let (exit_code, _, stderr) = run_cchooked("PreToolUse", input, config);
 
     assert_eq!(exit_code, 2);
-    assert!(stderr.contains("Error") || stderr.contains("error") || stderr.contains("regex"));
+    assert!(stderr.contains("[cchooked]") || stderr.contains("error") || stderr.contains("regex"));
 }
 
 #[test]
@@ -230,7 +230,7 @@ message = "should not reach"
 
     assert_eq!(exit_code, 2);
     assert!(
-        stderr.contains("Error")
+        stderr.contains("[cchooked]")
             || stderr.contains("error")
             || stderr.contains("unknown")
             || stderr.contains("invalid")
@@ -252,7 +252,7 @@ message = "should not reach"
 
     assert_eq!(exit_code, 2);
     assert!(
-        stderr.contains("Error")
+        stderr.contains("[cchooked]")
             || stderr.contains("error")
             || stderr.contains("unknown")
             || stderr.contains("invalid")
@@ -1288,7 +1288,7 @@ fn test_config_parse_error_returns_exit_code_2() {
     let output = child.wait_with_output().unwrap();
 
     assert_eq!(output.status.code().unwrap(), 2);
-    assert!(String::from_utf8_lossy(&output.stderr).contains("Error"));
+    assert!(String::from_utf8_lossy(&output.stderr).contains("[cchooked]"));
     assert!(String::from_utf8_lossy(&output.stderr).contains("Failed to parse config file"));
 }
 

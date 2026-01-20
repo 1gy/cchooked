@@ -164,7 +164,9 @@ fn main() {
                 let out = output::no_match_output();
                 output::emit(&out);
             } else {
-                eprintln!("Error: {e}");
+                eprintln!(
+                    "[cchooked] Configuration error (user action required - do not auto-fix):\n{e}"
+                );
             }
             std::process::exit(e.exit_code());
         }
