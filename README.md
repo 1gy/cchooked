@@ -22,15 +22,15 @@ Claude Code の hooks 機能向けルールベースエンジン。TOML 設定�
 
 ```bash
 # Linux x86_64 用バイナリをダウンロード
-curl -L -o cchooked https://github.com/1gy/cchooked/releases/latest/download/cchooked-linux-x86_64
+curl -L -O https://github.com/1gy/cchooked/releases/latest/download/cchooked-linux-x86_64
 
 # チェックサムを検証
 curl -L -o cchooked.sha256 https://github.com/1gy/cchooked/releases/latest/download/cchooked-linux-x86_64.sha256
 sha256sum -c cchooked.sha256
 
 # インストール
-chmod +x cchooked
-mv cchooked ~/.local/bin/
+chmod +x cchooked-linux-x86_64
+mv cchooked-linux-x86_64 ~/.local/bin/cchooked
 
 # クリーンアップ
 rm cchooked.sha256
