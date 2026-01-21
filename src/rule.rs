@@ -143,7 +143,7 @@ pub struct Rule {
 }
 
 /// Rule evaluation result containing matched rule information.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[allow(dead_code)]
 pub struct MatchResult {
     /// Name of the matched rule.
@@ -162,6 +162,17 @@ pub struct MatchResult {
     pub log_format: LogFormat,
     /// Working directory for run actions.
     pub working_dir: Option<String>,
+}
+
+/// Result of rule evaluation.
+#[derive(Debug, Clone)]
+pub struct EvaluationResult {
+    /// Collected log action results (in evaluation order).
+    pub log_results: Vec<MatchResult>,
+    /// Terminal action (block/run) if any.
+    pub terminal_result: Option<MatchResult>,
+    /// Execution context.
+    pub context: Context,
 }
 
 fn compile_regex_with_context(pattern: &str, rule_name: &str) -> Result<Regex> {
@@ -318,13 +329,23 @@ fn matches_executable(executables: &[String], command: &str) -> bool {
 
 /// Evaluates rules against the given event and input.
 ///
-/// Returns the first matching rule's result along with the context, or None if no rule matches.
+/// Rules are evaluated in priority order (highest first). Log actions are
+/// accumulated and continue evaluation. Block and Run actions are terminal
+/// and stop further evaluation.
+///
+/// Returns an `EvaluationResult` containing:
+/// - All matched log actions (in evaluation order)
+/// - An optional terminal action (block/run) if one was matched
+/// - The execution context
+///
+/// Returns `None` if no rules match.
 pub fn evaluate_rules(
     rules: &[Rule],
     event: &EventType,
     input: &HookInput,
-) -> Option<(MatchResult, Context)> {
+) -> Option<EvaluationResult> {
     let mut context: Option<Context> = None;
+    let mut log_results: Vec<MatchResult> = Vec::new();
 
     for rule in rules {
         if rule.event != *event {
@@ -367,22 +388,40 @@ pub fn evaluate_rules(
             }
         }
 
-        // If context was not created during branch matching, create it now
-        let ctx = context.unwrap_or_else(|| Context::from_input(input));
+        let match_result = MatchResult {
+            rule_name: rule.name.clone(),
+            action: rule.action.clone(),
+            message: rule.message.clone(),
+            run_command: rule.run_command.clone(),
+            on_error: rule.on_error.clone(),
+            log_file: rule.log_file.clone(),
+            log_format: rule.log_format.clone(),
+            working_dir: rule.working_dir.clone(),
+        };
 
-        return Some((
-            MatchResult {
-                rule_name: rule.name.clone(),
-                action: rule.action.clone(),
-                message: rule.message.clone(),
-                run_command: rule.run_command.clone(),
-                on_error: rule.on_error.clone(),
-                log_file: rule.log_file.clone(),
-                log_format: rule.log_format.clone(),
-                working_dir: rule.working_dir.clone(),
-            },
-            ctx,
-        ));
+        match rule.action {
+            ActionType::Log => {
+                log_results.push(match_result);
+                continue;
+            }
+            ActionType::Block | ActionType::Run => {
+                let ctx = context.unwrap_or_else(|| Context::from_input(input));
+                return Some(EvaluationResult {
+                    log_results,
+                    terminal_result: Some(match_result),
+                    context: ctx,
+                });
+            }
+        }
+    }
+
+    if !log_results.is_empty() {
+        let ctx = context.unwrap_or_else(|| Context::from_input(input));
+        return Some(EvaluationResult {
+            log_results,
+            terminal_result: None,
+            context: ctx,
+        });
     }
 
     None

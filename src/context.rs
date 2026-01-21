@@ -2,7 +2,7 @@ use crate::rule::HookInput;
 use std::process::Command;
 
 /// Execution context containing extracted input values and environment information.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Context {
     /// Command string from tool input.
     pub command: String,
