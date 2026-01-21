@@ -277,7 +277,6 @@ fn matches_command(patterns: &[Regex], command: &str) -> bool {
         return true;
     }
 
-    // 複合コマンドを分割
     let commands = crate::parser::split_compound_command(command);
     let command_strings = crate::parser::commands_to_strings(&commands);
 
@@ -315,7 +314,6 @@ fn matches_executable(executables: &[String], command: &str) -> bool {
         return true;
     }
 
-    // コマンドを分割して各コマンド名を取得
     let commands = crate::parser::split_compound_command(command);
     for cmd_tokens in &commands {
         if let Some(cmd_name) = cmd_tokens.first()
