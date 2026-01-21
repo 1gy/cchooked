@@ -143,8 +143,18 @@ fn run() -> error::Result<output::Output> {
     let rules = rule::compile_rules(&config)?;
 
     match rule::evaluate_rules(&rules, &event, &input) {
-        Some((match_result, context)) => {
-            Ok(action::execute_action(&match_result, &context, &event))
+        Some(eval_result) => {
+            for log_result in &eval_result.log_results {
+                action::execute_action(log_result, &eval_result.context, &event);
+            }
+            match eval_result.terminal_result {
+                Some(ref terminal_result) => Ok(action::execute_action(
+                    terminal_result,
+                    &eval_result.context,
+                    &event,
+                )),
+                None => Ok(output::no_match_output()),
+            }
         }
         None => Ok(output::no_match_output()),
     }

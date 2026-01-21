@@ -1321,3 +1321,140 @@ fn test_missing_event_argument_returns_exit_code_2() {
     assert_eq!(output.status.code().unwrap(), 2);
     assert!(String::from_utf8_lossy(&output.stderr).contains("Missing event argument"));
 }
+
+// =============================================================================
+// Log action continuation tests
+// =============================================================================
+
+#[test]
+fn test_log_does_not_skip_block() {
+    let temp_dir = TempDir::new().unwrap();
+    let log_file_path = temp_dir.path().join("test.log");
+
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "rm -rf /"}}"#;
+    let config = format!(
+        r#"
+[rules.log-all]
+event = "PreToolUse"
+matcher = "Bash"
+action = "log"
+log_file = "{}"
+priority = 9999
+
+[rules.block-dangerous]
+event = "PreToolUse"
+matcher = "Bash"
+action = "block"
+message = "Dangerous command blocked"
+when.command = "rm\\s+-rf"
+priority = 100
+"#,
+        log_file_path.display()
+    );
+
+    let (exit_code, _, stderr) = run_cchooked_with_dir("PreToolUse", input, &config, &temp_dir);
+
+    // Should be blocked
+    assert_eq!(exit_code, 2, "Should be blocked with exit code 2");
+    assert!(
+        stderr.contains("Dangerous command blocked"),
+        "Should contain block message"
+    );
+
+    // And the log should be recorded
+    let log_content = std::fs::read_to_string(&log_file_path).unwrap();
+    assert!(
+        log_content.contains("rm -rf"),
+        "Log should contain the command"
+    );
+}
+
+#[test]
+fn test_multiple_logs_all_executed() {
+    let temp_dir = TempDir::new().unwrap();
+    let log_file1 = temp_dir.path().join("log1.log");
+    let log_file2 = temp_dir.path().join("log2.log");
+
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "echo hello"}}"#;
+    let config = format!(
+        r#"
+[rules.log-first]
+event = "PreToolUse"
+matcher = "Bash"
+action = "log"
+log_file = "{}"
+priority = 200
+
+[rules.log-second]
+event = "PreToolUse"
+matcher = "Bash"
+action = "log"
+log_file = "{}"
+priority = 100
+"#,
+        log_file1.display(),
+        log_file2.display()
+    );
+
+    let (exit_code, _, _) = run_cchooked_with_dir("PreToolUse", input, &config, &temp_dir);
+
+    assert_eq!(exit_code, 0, "Should exit with 0 (no terminal action)");
+
+    // Both log files should contain the command
+    let log1_content = std::fs::read_to_string(&log_file1).unwrap();
+    let log2_content = std::fs::read_to_string(&log_file2).unwrap();
+    assert!(
+        log1_content.contains("echo hello"),
+        "Log 1 should contain the command"
+    );
+    assert!(
+        log2_content.contains("echo hello"),
+        "Log 2 should contain the command"
+    );
+}
+
+#[test]
+fn test_log_before_run_both_executed() {
+    let temp_dir = TempDir::new().unwrap();
+    let log_file = temp_dir.path().join("test.log");
+    let marker_file = temp_dir.path().join("marker.txt");
+
+    let input = r#"{"tool_name": "Bash", "tool_input": {"command": "test command"}}"#;
+    let config = format!(
+        r#"
+[rules.log-all]
+event = "PreToolUse"
+matcher = "Bash"
+action = "log"
+log_file = "{}"
+priority = 9999
+
+[rules.run-marker]
+event = "PreToolUse"
+matcher = "Bash"
+action = "run"
+command = "touch {}"
+priority = 100
+"#,
+        log_file.display(),
+        marker_file.display()
+    );
+
+    let (exit_code, _, _) = run_cchooked_with_dir("PreToolUse", input, &config, &temp_dir);
+
+    assert_eq!(exit_code, 0, "Should exit with 0 (run succeeded)");
+
+    // Log should be executed
+    assert!(log_file.exists(), "Log file should be created");
+    let log_content = std::fs::read_to_string(&log_file).unwrap();
+    assert!(
+        log_content.contains("test command"),
+        "Log should contain the command"
+    );
+
+    // Run should also be executed
+    assert!(
+        marker_file.exists(),
+        "Marker file should be created by run action"
+    );
+}
