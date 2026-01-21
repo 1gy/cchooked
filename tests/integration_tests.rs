@@ -20,12 +20,14 @@ fn run_cchooked(event: &str, input: &str, config: &str) -> (i32, String, String)
         .spawn()
         .unwrap();
 
-    child
-        .stdin
-        .as_mut()
-        .unwrap()
-        .write_all(input.as_bytes())
-        .unwrap();
+    let write_result = child.stdin.as_mut().unwrap().write_all(input.as_bytes());
+    if let Err(e) = write_result {
+        assert!(
+            e.kind() == std::io::ErrorKind::BrokenPipe,
+            "Unexpected write error: {:?}",
+            e
+        );
+    }
     let output = child.wait_with_output().unwrap();
 
     let exit_code = output.status.code().unwrap_or(-1);
@@ -186,12 +188,14 @@ fn test_config_not_found() {
         .spawn()
         .unwrap();
 
-    child
-        .stdin
-        .as_mut()
-        .unwrap()
-        .write_all(input.as_bytes())
-        .unwrap();
+    let write_result = child.stdin.as_mut().unwrap().write_all(input.as_bytes());
+    if let Err(e) = write_result {
+        assert!(
+            e.kind() == std::io::ErrorKind::BrokenPipe,
+            "Unexpected write error: {:?}",
+            e
+        );
+    }
     let output = child.wait_with_output().unwrap();
 
     assert_eq!(output.status.code().unwrap(), 0);
@@ -278,12 +282,14 @@ fn run_cchooked_with_dir(
         .spawn()
         .unwrap();
 
-    child
-        .stdin
-        .as_mut()
-        .unwrap()
-        .write_all(input.as_bytes())
-        .unwrap();
+    let write_result = child.stdin.as_mut().unwrap().write_all(input.as_bytes());
+    if let Err(e) = write_result {
+        assert!(
+            e.kind() == std::io::ErrorKind::BrokenPipe,
+            "Unexpected write error: {:?}",
+            e
+        );
+    }
     let output = child.wait_with_output().unwrap();
 
     let exit_code = output.status.code().unwrap_or(-1);
@@ -573,12 +579,14 @@ fn run_cchooked_with_branch(
         .spawn()
         .unwrap();
 
-    child
-        .stdin
-        .as_mut()
-        .unwrap()
-        .write_all(input.as_bytes())
-        .unwrap();
+    let write_result = child.stdin.as_mut().unwrap().write_all(input.as_bytes());
+    if let Err(e) = write_result {
+        assert!(
+            e.kind() == std::io::ErrorKind::BrokenPipe,
+            "Unexpected write error: {:?}",
+            e
+        );
+    }
     let output = child.wait_with_output().unwrap();
 
     let exit_code = output.status.code().unwrap_or(-1);
@@ -1279,12 +1287,14 @@ fn test_config_parse_error_returns_exit_code_2() {
         .spawn()
         .unwrap();
 
-    child
-        .stdin
-        .as_mut()
-        .unwrap()
-        .write_all(input.as_bytes())
-        .unwrap();
+    let write_result = child.stdin.as_mut().unwrap().write_all(input.as_bytes());
+    if let Err(e) = write_result {
+        assert!(
+            e.kind() == std::io::ErrorKind::BrokenPipe,
+            "Unexpected write error: {:?}",
+            e
+        );
+    }
     let output = child.wait_with_output().unwrap();
 
     assert_eq!(output.status.code().unwrap(), 2);
