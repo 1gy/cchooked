@@ -16,13 +16,51 @@ Claude Code の hooks 機能向けルールベースエンジン。TOML 設定�
 
 ## クイックスタート
 
+### 方法1: GitHub Releaseからインストール（推奨）
+
+最新のビルド済みバイナリをダウンロードしてインストールします。
+
 ```bash
+# Linux x86_64 用バイナリをダウンロード
+curl -L -O https://github.com/1gy/cchooked/releases/latest/download/cchooked-linux-x86_64
+
+# チェックサムを検証
+curl -L -o cchooked.sha256 https://github.com/1gy/cchooked/releases/latest/download/cchooked-linux-x86_64.sha256
+sha256sum -c cchooked.sha256
+
+# インストール
+chmod +x cchooked-linux-x86_64
+mv cchooked-linux-x86_64 ~/.local/bin/cchooked
+
+# クリーンアップ
+rm cchooked.sha256
+```
+
+### 方法2: cargo install でインストール
+
+Rust のパッケージマネージャーを使用してインストールします。
+
+```bash
+cargo install --git https://github.com/1gy/cchooked
+```
+
+### 方法3: ソースからビルド
+
+リポジトリをクローンしてビルドします。
+
+```bash
+# リポジトリをクローン
+git clone https://github.com/1gy/cchooked.git
+cd cchooked
+
 # ビルド
 cargo build --release
 
 # パスの通った場所にコピー
 cp target/release/cchooked ~/.local/bin/
 ```
+
+### 設定ファイルの準備
 
 `.claude/settings.local.json` に hooks を設定:
 
