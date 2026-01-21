@@ -20,6 +20,7 @@ shellish_parse = "2.2"
 [dev-dependencies]
 serial_test = "3.3.1"
 tempfile = "3"
+rstest = "0.24"
 
 [profile.release]
 strip = true
