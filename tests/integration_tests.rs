@@ -2,23 +2,33 @@
 
 use std::fs;
 use std::io::Write;
+use std::path::Path;
 use std::process::{Command, Stdio};
 use tempfile::TempDir;
 
-fn run_cchooked(event: &str, input: &str, config: &str) -> (i32, String, String) {
-    let temp_dir = TempDir::new().unwrap();
-    let config_dir = temp_dir.path().join(".claude");
+fn run_cchooked_internal(
+    event: &str,
+    input: &str,
+    config: &str,
+    working_dir: &Path,
+    env_vars: &[(&str, &str)],
+) -> (i32, String, String) {
+    let config_dir = working_dir.join(".claude");
     fs::create_dir_all(&config_dir).unwrap();
     fs::write(config_dir.join("hooks-rules.toml"), config).unwrap();
 
-    let mut child = Command::new(env!("CARGO_BIN_EXE_cchooked"))
-        .arg(event)
-        .current_dir(temp_dir.path())
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_cchooked"));
+    cmd.arg(event)
+        .current_dir(working_dir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
+        .stderr(Stdio::piped());
+
+    for (key, value) in env_vars {
+        cmd.env(key, value);
+    }
+
+    let mut child = cmd.spawn().unwrap();
 
     let write_result = child.stdin.as_mut().unwrap().write_all(input.as_bytes());
     if let Err(e) = write_result {
@@ -28,13 +38,18 @@ fn run_cchooked(event: &str, input: &str, config: &str) -> (i32, String, String)
             e
         );
     }
-    let output = child.wait_with_output().unwrap();
 
+    let output = child.wait_with_output().unwrap();
     let exit_code = output.status.code().unwrap_or(-1);
     let stdout = String::from_utf8_lossy(&output.stdout).to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();
 
     (exit_code, stdout, stderr)
+}
+
+fn run_cchooked(event: &str, input: &str, config: &str) -> (i32, String, String) {
+    let temp_dir = TempDir::new().unwrap();
+    run_cchooked_internal(event, input, config, temp_dir.path(), &[])
 }
 
 #[test]
@@ -269,34 +284,7 @@ fn run_cchooked_with_dir(
     config: &str,
     temp_dir: &TempDir,
 ) -> (i32, String, String) {
-    let config_dir = temp_dir.path().join(".claude");
-    fs::create_dir_all(&config_dir).unwrap();
-    fs::write(config_dir.join("hooks-rules.toml"), config).unwrap();
-
-    let mut child = Command::new(env!("CARGO_BIN_EXE_cchooked"))
-        .arg(event)
-        .current_dir(temp_dir.path())
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-
-    let write_result = child.stdin.as_mut().unwrap().write_all(input.as_bytes());
-    if let Err(e) = write_result {
-        assert!(
-            e.kind() == std::io::ErrorKind::BrokenPipe,
-            "Unexpected write error: {:?}",
-            e
-        );
-    }
-    let output = child.wait_with_output().unwrap();
-
-    let exit_code = output.status.code().unwrap_or(-1);
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-    (exit_code, stdout, stderr)
+    run_cchooked_internal(event, input, config, temp_dir.path(), &[])
 }
 
 #[test]
@@ -554,35 +542,13 @@ fn run_cchooked_with_branch(
     branch: &str,
 ) -> (i32, String, String) {
     let temp_dir = TempDir::new().unwrap();
-    let config_dir = temp_dir.path().join(".claude");
-    fs::create_dir_all(&config_dir).unwrap();
-    fs::write(config_dir.join("hooks-rules.toml"), config).unwrap();
-
-    let mut child = Command::new(env!("CARGO_BIN_EXE_cchooked"))
-        .arg(event)
-        .env("CCHOOKED_BRANCH", branch)
-        .current_dir(temp_dir.path())
-        .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .unwrap();
-
-    let write_result = child.stdin.as_mut().unwrap().write_all(input.as_bytes());
-    if let Err(e) = write_result {
-        assert!(
-            e.kind() == std::io::ErrorKind::BrokenPipe,
-            "Unexpected write error: {:?}",
-            e
-        );
-    }
-    let output = child.wait_with_output().unwrap();
-
-    let exit_code = output.status.code().unwrap_or(-1);
-    let stdout = String::from_utf8_lossy(&output.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-
-    (exit_code, stdout, stderr)
+    run_cchooked_internal(
+        event,
+        input,
+        config,
+        temp_dir.path(),
+        &[("CCHOOKED_BRANCH", branch)],
+    )
 }
 
 #[test]
